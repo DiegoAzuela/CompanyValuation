@@ -4,7 +4,7 @@
 # **DOCUMENTATION**
 - https://www.alphavantage.co/documentation/
 
-# BASEPLAN
+# **BASEPLAN**
 alpha_vantage_valuation_tool/
 │
 ├── constants.py               # Stores the API endpoint constants
@@ -17,3 +17,9 @@ alpha_vantage_valuation_tool/
 │
 ├── main.py                     # Main entry point to run the script
 └── requirements.txt            # Required Python packages (requests, numpy, etc.)
+
+# **WHERE TO HOST**
+- PythonAnywhere
+
+# TODO
+- Send whatsapp/mail alerts with good investment oportunities

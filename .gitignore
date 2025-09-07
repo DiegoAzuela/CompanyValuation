@@ -207,4 +207,4 @@ marimo/_lsp/
 __marimo__/
 
 # Ignore a specific file
-apikey.txt
+_token/apikey.txt
