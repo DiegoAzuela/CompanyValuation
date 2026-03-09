@@ -1,0 +1,8 @@
+{
+    "secData":{
+        "url_ticker_and_cik": "https://www.sec.gov/files/company_tickers.json",
+        "headers": {
+            "User-Agent": "**review .env file for this info**"
+        }
+    }
+}

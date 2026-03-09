@@ -1,5 +1,5 @@
-# valuation_models/dcf.py
+#!/usr/bin/env python3
 """
-    TODO: Implement DCF valuation model here.
-        - Apply method to select start and finish date
+Description: DCF Model estimate intrinsic value by projecting future cash flows and discounting them to present value.
 """
+

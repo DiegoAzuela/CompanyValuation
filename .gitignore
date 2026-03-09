@@ -208,3 +208,9 @@ __marimo__/
 
 # Ignore a specific file
 _token/apikey.txt
+
+# Ignore all .env files
+.env
+
+# Ingnore all the data files
+data/

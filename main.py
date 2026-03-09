@@ -1,9 +1,14 @@
-import json
-from alpha_vantage_client import AlphaVantageClient as avc
+from db.database import init_db
+from data_sources.sec import TickerInfo
+from dotenv import load_dotenv
+import os
 
-if __name__=="__main__":
-    ticker = input("Enter the stock ticker symbol: ").upper()
-    client = avc("_token/apikey.txt")
-    
-    data = client.get_balance_sheet(ticker)
-    print(json.dumps(data, indent=2))  # pretty JSON string
+TickerInfo.seed_db()
+init_db()
+
+load_dotenv()
+
+if __name__ == "__main__":
+    # Example usage of the TickerInfo class to fetch ticker information
+    tickers = TickerInfo.ticker_list()
+    print(f"Fetched {tickers} tickers from the SEC")
