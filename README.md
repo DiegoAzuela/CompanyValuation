@@ -18,9 +18,21 @@
 - ```py .\main.py```
 
 ## **DOCUMENTATION**
-- SEC API: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
-- SEC Tickers: https://www.sec.gov/files/company_tickers.json
-- SEC Sample Company Facts: https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
+- SEC Developer Page: https://www.sec.gov/about/developer-resources
+    - SEC API: https://www.sec.gov/search-filings/edgar-application-programming-interfaces (use this to determine what API to use)
+        - SEC API Overview: https://www.sec.gov/files/edgar/filer-information/api-overview.pdf
+        - Check "Other Sources": https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data
+            - Financial Statements: https://www.sec.gov/files/financial-statement-data-sets.pdf
+    - SEC Tickers: https://www.sec.gov/files/company_tickers.json
+    - SEC CIK-Company Mapping: https://www.sec.gov/include/ticker.txt
+    - SEC Dataset: https://www.sec.gov/files/financial-statement-data-sets.pdf
+    - SEC Sample Company Facts: https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
+    - SEC Timestamps Explained: https://www.sec.gov/files/edgar/pds_dissemination_spec.pdf
+    - SEC FullText Review: https://www.sec.gov/edgar/searchedgar/edgarfulltextfaq.htm
+- OPEN INSIDER: http://openinsider.com/
+- HOW TO SEE DB:
+    - Download DB Browser for SQLite — https://sqlitebrowser.org/dl/
+    - Open DB Browser --> File → Open Database --> Browse Data tab
 
 ## **BASEPLAN**
 ```text
@@ -50,20 +62,24 @@ CompanyValuation/
 
 ## TODO
 - **Gameplan:**
-    - SEC API
-    - XBRL Parser
-    - Normalized financial database
-    - Valuation engine
-    - Metrics (ROE, P/B, Graham number, etc.)
-    - Manual
-        1. Ask user for a Ticker
-        2. Take the Ticker and run DCF valuation
-            - What is DCF? Discounted cash flow. 
-        3. Take the information and format it in PDF
-            - What does the report need to have? 
-        4. Share pdf in whatsapp and/or gmail
-    - Auto
-        1. Take a Ticker from the S&P list
-        2. Take the Ticker and run DCF valuation
-        3. Take the information and format it in PDF
-        4. Share pdf in whatsapp and/or gmail
+    - **Data Manipulation**
+        1. DONE - CIK-Ticker Mapping: https://www.sec.gov/include/ticker.txt
+            - data/tickers.db stores the data 
+        2. NEXT STEPS: SEC API: Pull Financials
+        3. Parse Info: XBRL Parser
+        4. Normalized financial database
+        5. Valuation engine
+        6. Metrics (ROE, P/B, Graham number, etc.)
+    - **Integration**
+        - Manual
+            1. Ask user for a Ticker
+            2. Take the Ticker and run DCF valuation
+                - What is DCF? Discounted cash flow. 
+            3. Take the information and format it in PDF
+                - What does the report need to have? 
+            4. Share pdf in whatsapp and/or gmail
+        - Auto
+            1. Take a Ticker from the S&P list
+            2. Take the Ticker and run DCF valuation
+            3. Take the information and format it in PDF
+            4. Share pdf in whatsapp and/or gmail

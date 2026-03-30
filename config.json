@@ -1,6 +1,7 @@
 {
     "secData":{
         "url_ticker_and_cik": "https://www.sec.gov/files/company_tickers.json",
+        "url_financials": "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
         "headers": {
             "User-Agent": "**review .env file for this info**"
         }
