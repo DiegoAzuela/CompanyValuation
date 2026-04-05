@@ -93,14 +93,12 @@ CompanyValuation/
 ## TODO
 - **Gameplan:**
     - **Data Manipulation**
-        1. DONE - CIK-Ticker Mapping: https://www.sec.gov/include/ticker.txt
-            - data/tickers.db stores the data 
-        2. NEXT STEPS: SEC API: Pull Financials
-            - companyConcept a subset of companyFacts
-            - can we parse based on date? 
-            - define what concepts are important for each valuation model
-        3. Parse Info: XBRL Parser
-        4. Normalized financial database
+        1. Initial CIK-Ticker Mapping
+        2. SEC DATA for Financial Statements
+        3. NEXT STEPS --> Financial Statements
+            - Build balance_sheet and income_statement
+        4. Formatting P1
+            - Financial Statement reporting
         5. Valuation engine
         6. Metrics (ROE, P/B, Graham number, etc.)
     - **Integration**
