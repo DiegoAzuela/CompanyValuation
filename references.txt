@@ -1,9 +1,0 @@
-#REFERENCES
-
-##**SEC DATA**
-- CIK = Central Index Key
-    - CIK to TICKER: https://www.sec.gov/files/company_tickers.json
-    - Structure of the link: https://data.sec.gov/submissions/CIK##########.json (API requires 10 digits, fill with leading zeros)
-##**DCF VALUATION**
-- (1) DCF: https://www.investopedia.com/terms/d/dcf.asp
--

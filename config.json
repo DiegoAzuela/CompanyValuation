@@ -1,7 +1,9 @@
 {
-    "secData":{
-        "url_ticker_and_cik": "https://www.sec.gov/files/company_tickers.json",
-        "url_financials": "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
+    "secData": {
+        "url_ticker_and_cik":   "https://www.sec.gov/files/company_tickers.json",
+        "url_companyfacts":     "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
+        "url_concept":          "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/{taxonomy}/{concept}.json",
+        "url_concept_withframe":"https://data.sec.gov/api/xbrl/frames/{taxonomy}/{concept}/{unit}/{frame}.json",
         "headers": {
             "User-Agent": "**review .env file for this info**"
         }

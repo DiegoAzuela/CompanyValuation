@@ -1,0 +1,639 @@
+{
+  "_meta": {
+    "description": "XBRL concept fallback chains for financial statement assembly. Each line item lists candidate tags in priority order — the first one found for a given CIK is used.",
+    "taxonomy": "us-gaap",
+    "xsd": "https://xbrl.fasb.org/us-gaap/2026/elts/us-gaap-2026.xsd",
+    "strategy": "first_match",
+    "sec_guides": {
+      "balance_sheet": "https://www.sec.gov/files/balancesheet-building-blocks.pdf",
+      "income_statement": "https://www.sec.gov/files/income-statement-building-blocks.pdf"
+    }
+  },
+
+  "balance_sheet": {
+    "_label": "Statement of Financial Position",
+    "_equation": "Assets = Liabilities + Equity",
+
+    "current_assets": {
+      "_label": "Current Assets",
+      "_is_section": true,
+
+      "cash_and_equivalents": {
+        "label": "Cash and Cash Equivalents",
+        "balance": "debit",
+        "candidates": [
+          "CashAndCashEquivalentsAtCarryingValue",
+          "CashAndCashEquivalents",
+          "Cash"
+        ]
+      },
+
+      "short_term_investments": {
+        "label": "Short-Term Investments",
+        "balance": "debit",
+        "candidates": [
+          "ShortTermInvestments",
+          "MarketableSecuritiesCurrent",
+          "AvailableForSaleSecuritiesCurrent",
+          "DebtSecuritiesAvailableForSaleCurrent",
+          "TradingSecuritiesCurrent",
+          "HeldToMaturitySecuritiesCurrent"
+        ]
+      },
+
+      "accounts_receivable": {
+        "label": "Accounts Receivable, Net",
+        "balance": "debit",
+        "candidates": [
+          "AccountsReceivableNetCurrent",
+          "ReceivablesNetCurrent",
+          "AccountsAndOtherReceivablesNetCurrent",
+          "AccountsReceivableNet"
+        ]
+      },
+
+      "inventory": {
+        "label": "Inventory, Net",
+        "balance": "debit",
+        "candidates": [
+          "InventoryNet",
+          "InventoryFinishedGoodsNetOfReserves",
+          "InventoryGross",
+          "FIFOInventoryAmount"
+        ]
+      },
+
+      "prepaid_and_other": {
+        "label": "Prepaid Expenses and Other Current Assets",
+        "balance": "debit",
+        "candidates": [
+          "PrepaidExpenseAndOtherAssetsCurrent",
+          "PrepaidExpenseCurrent",
+          "OtherAssetsCurrent",
+          "PrepaidExpenseAndOtherCurrentAssets"
+        ]
+      },
+
+      "total_current_assets": {
+        "label": "Total Current Assets",
+        "balance": "debit",
+        "is_total": true,
+        "candidates": [
+          "AssetsCurrent"
+        ]
+      }
+    },
+
+    "noncurrent_assets": {
+      "_label": "Long-Term (Non-Current) Assets",
+      "_is_section": true,
+
+      "ppe_net": {
+        "label": "Property, Plant and Equipment, Net",
+        "balance": "debit",
+        "candidates": [
+          "PropertyPlantAndEquipmentNet",
+          "PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization",
+          "PropertyPlantAndEquipmentNetExcludingCapitalLeasedAssets"
+        ]
+      },
+
+      "operating_lease_rou": {
+        "label": "Operating Lease Right-of-Use Asset",
+        "balance": "debit",
+        "candidates": [
+          "OperatingLeaseRightOfUseAsset",
+          "OperatingLeaseRightOfUseAssetNoncurrent"
+        ]
+      },
+
+      "goodwill": {
+        "label": "Goodwill",
+        "balance": "debit",
+        "candidates": [
+          "Goodwill"
+        ]
+      },
+
+      "intangible_assets": {
+        "label": "Intangible Assets, Net (Excluding Goodwill)",
+        "balance": "debit",
+        "candidates": [
+          "IntangibleAssetsNetExcludingGoodwill",
+          "FiniteLivedIntangibleAssetsNet",
+          "IndefiniteLivedIntangibleAssetsExcludingGoodwill",
+          "IntangibleAssetsNetIncludingGoodwill"
+        ]
+      },
+
+      "long_term_investments": {
+        "label": "Long-Term Investments",
+        "balance": "debit",
+        "candidates": [
+          "LongTermInvestments",
+          "MarketableSecuritiesNoncurrent",
+          "AvailableForSaleSecuritiesNoncurrent",
+          "DebtSecuritiesAvailableForSaleNoncurrent",
+          "EquitySecuritiesWithoutReadilyDeterminableFairValueAmount",
+          "LongTermInvestmentsAndReceivablesNet"
+        ]
+      },
+
+      "deferred_tax_assets": {
+        "label": "Deferred Income Tax Assets, Net",
+        "balance": "debit",
+        "candidates": [
+          "DeferredIncomeTaxAssetsNet",
+          "DeferredTaxAssetsLiabilitiesNet",
+          "DeferredTaxAssetsNet"
+        ]
+      },
+
+      "other_noncurrent_assets": {
+        "label": "Other Non-Current Assets",
+        "balance": "debit",
+        "candidates": [
+          "OtherAssetsNoncurrent",
+          "OtherAssets"
+        ]
+      },
+
+      "total_noncurrent_assets": {
+        "label": "Total Non-Current Assets",
+        "balance": "debit",
+        "is_total": true,
+        "candidates": [
+          "AssetsNoncurrent"
+        ]
+      },
+
+      "total_assets": {
+        "label": "Total Assets",
+        "balance": "debit",
+        "is_total": true,
+        "candidates": [
+          "Assets"
+        ]
+      }
+    },
+
+    "current_liabilities": {
+      "_label": "Current Liabilities",
+      "_is_section": true,
+
+      "accounts_payable": {
+        "label": "Accounts Payable",
+        "balance": "credit",
+        "candidates": [
+          "AccountsPayableCurrent",
+          "AccountsPayableAndAccruedLiabilitiesCurrent",
+          "AccountsPayable"
+        ]
+      },
+
+      "accrued_liabilities": {
+        "label": "Accrued Liabilities",
+        "balance": "credit",
+        "candidates": [
+          "AccruedLiabilitiesCurrent",
+          "AccruedLiabilitiesAndOtherLiabilities",
+          "OtherLiabilitiesCurrent",
+          "AccruedExpensesAndOtherCurrentLiabilities"
+        ]
+      },
+
+      "salaries_payable": {
+        "label": "Employee-Related Liabilities / Salaries Payable",
+        "balance": "credit",
+        "candidates": [
+          "EmployeeRelatedLiabilitiesCurrent",
+          "AccruedSalariesCurrent",
+          "AccruedEmployeeBenefitsCurrent"
+        ]
+      },
+
+      "short_term_debt": {
+        "label": "Short-Term Borrowings",
+        "balance": "credit",
+        "candidates": [
+          "ShortTermBorrowings",
+          "CommercialPaper",
+          "ShortTermBankLoansAndNotesPayable",
+          "NotesPayableCurrent"
+        ]
+      },
+
+      "current_portion_ltd": {
+        "label": "Current Portion of Long-Term Debt",
+        "balance": "credit",
+        "candidates": [
+          "LongTermDebtCurrent",
+          "LongTermDebtAndCapitalLeaseObligationsCurrent",
+          "DebtCurrent",
+          "CurrentMaturitiesOfLongTermDebt"
+        ]
+      },
+
+      "operating_lease_current": {
+        "label": "Operating Lease Liability, Current",
+        "balance": "credit",
+        "candidates": [
+          "OperatingLeaseLiabilityCurrent"
+        ]
+      },
+
+      "deferred_revenue_current": {
+        "label": "Deferred Revenue, Current",
+        "balance": "credit",
+        "candidates": [
+          "DeferredRevenueCurrent",
+          "ContractWithCustomerLiabilityCurrent",
+          "DeferredRevenueAndCreditsNoncurrent"
+        ]
+      },
+
+      "total_current_liabilities": {
+        "label": "Total Current Liabilities",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "LiabilitiesCurrent"
+        ]
+      }
+    },
+
+    "noncurrent_liabilities": {
+      "_label": "Long-Term (Non-Current) Liabilities",
+      "_is_section": true,
+
+      "long_term_debt": {
+        "label": "Long-Term Debt",
+        "balance": "credit",
+        "candidates": [
+          "LongTermDebtNoncurrent",
+          "LongTermDebtAndCapitalLeaseObligations",
+          "LongTermDebt",
+          "SeniorLongTermNotes",
+          "LongTermNotesPayable"
+        ]
+      },
+
+      "operating_lease_noncurrent": {
+        "label": "Operating Lease Liability, Non-Current",
+        "balance": "credit",
+        "candidates": [
+          "OperatingLeaseLiabilityNoncurrent",
+          "OperatingLeaseLiability"
+        ]
+      },
+
+      "deferred_tax_liabilities": {
+        "label": "Deferred Income Tax Liabilities, Net",
+        "balance": "credit",
+        "candidates": [
+          "DeferredIncomeTaxLiabilitiesNet",
+          "DeferredTaxLiabilitiesNoncurrent",
+          "DeferredIncomeTaxLiabilities"
+        ]
+      },
+
+      "deferred_revenue_noncurrent": {
+        "label": "Deferred Revenue, Non-Current",
+        "balance": "credit",
+        "candidates": [
+          "DeferredRevenueNoncurrent",
+          "ContractWithCustomerLiabilityNoncurrent"
+        ]
+      },
+
+      "other_noncurrent_liabilities": {
+        "label": "Other Non-Current Liabilities",
+        "balance": "credit",
+        "candidates": [
+          "OtherLiabilitiesNoncurrent",
+          "OtherNoncurrentLiabilities"
+        ]
+      },
+
+      "total_noncurrent_liabilities": {
+        "label": "Total Non-Current Liabilities",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "LiabilitiesNoncurrent"
+        ]
+      },
+
+      "total_liabilities": {
+        "label": "Total Liabilities",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "Liabilities",
+          "LiabilitiesAndRedeemableNoncontrollingInterest"
+        ]
+      }
+    },
+
+    "stockholders_equity": {
+      "_label": "Stockholders' Equity",
+      "_is_section": true,
+
+      "common_stock": {
+        "label": "Common Stock, Value",
+        "balance": "credit",
+        "candidates": [
+          "CommonStockValue",
+          "CommonStockValueOutstanding"
+        ]
+      },
+
+      "additional_paid_in_capital": {
+        "label": "Additional Paid-In Capital",
+        "balance": "credit",
+        "candidates": [
+          "AdditionalPaidInCapital",
+          "AdditionalPaidInCapitalCommonStock"
+        ]
+      },
+
+      "retained_earnings": {
+        "label": "Retained Earnings (Accumulated Deficit)",
+        "balance": "credit",
+        "candidates": [
+          "RetainedEarningsAccumulatedDeficit",
+          "RetainedEarningsAppropriated",
+          "RetainedEarningsUnappropriated"
+        ]
+      },
+
+      "treasury_stock": {
+        "label": "Treasury Stock (contra-equity)",
+        "balance": "debit",
+        "candidates": [
+          "TreasuryStockCommonValue",
+          "TreasuryStockValue"
+        ]
+      },
+
+      "aoci": {
+        "label": "Accumulated Other Comprehensive Income (Loss)",
+        "balance": "credit",
+        "candidates": [
+          "AccumulatedOtherComprehensiveIncomeLossNetOfTax",
+          "AccumulatedOtherComprehensiveIncomeLossAvailableForSaleSecuritiesAdjustmentNetOfTax"
+        ]
+      },
+
+      "total_stockholders_equity": {
+        "label": "Total Stockholders' Equity",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "StockholdersEquity",
+          "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+        ]
+      },
+
+      "total_liabilities_and_equity": {
+        "label": "Total Liabilities and Stockholders' Equity",
+        "balance": "credit",
+        "is_total": true,
+        "note": "Must equal Total Assets",
+        "candidates": [
+          "LiabilitiesAndStockholdersEquity"
+        ]
+      }
+    }
+  },
+
+  "income_statement": {
+    "_label": "Statement of Operations",
+    "_equation": "Revenue - Expenses = Net Income (Loss)",
+
+    "revenue": {
+      "_label": "Revenue",
+      "_is_section": true,
+
+      "total_revenue": {
+        "label": "Revenue",
+        "balance": "credit",
+        "candidates": [
+          "RevenueFromContractWithCustomerExcludingAssessedTax",
+          "RevenueFromContractWithCustomerIncludingAssessedTax",
+          "Revenues",
+          "SalesRevenueNet",
+          "RevenueNet",
+          "SalesRevenueGoodsNet",
+          "SalesRevenueServicesNet"
+        ]
+      }
+    },
+
+    "cost_of_revenue": {
+      "_label": "Cost of Revenue",
+      "_is_section": true,
+
+      "cogs": {
+        "label": "Cost of Goods Sold / Cost of Revenue",
+        "balance": "debit",
+        "candidates": [
+          "CostOfRevenue",
+          "CostOfGoodsAndServicesSold",
+          "CostOfGoodsSold",
+          "CostOfServices",
+          "CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization"
+        ]
+      },
+
+      "gross_profit": {
+        "label": "Gross Profit",
+        "balance": "credit",
+        "is_subtotal": true,
+        "candidates": [
+          "GrossProfit"
+        ]
+      }
+    },
+
+    "operating_expenses": {
+      "_label": "Operating Expenses",
+      "_is_section": true,
+
+      "research_and_development": {
+        "label": "Research and Development Expense",
+        "balance": "debit",
+        "candidates": [
+          "ResearchAndDevelopmentExpense",
+          "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
+          "ResearchAndDevelopmentAssetAcquiredOtherThanThroughBusinessCombinationWrittenOff"
+        ]
+      },
+
+      "sga": {
+        "label": "Selling, General and Administrative Expense",
+        "balance": "debit",
+        "candidates": [
+          "SellingGeneralAndAdministrativeExpense",
+          "GeneralAndAdministrativeExpense",
+          "SellingAndMarketingExpense",
+          "SellingExpense"
+        ]
+      },
+
+      "depreciation_amortization": {
+        "label": "Depreciation and Amortization",
+        "balance": "debit",
+        "candidates": [
+          "DepreciationDepletionAndAmortization",
+          "DepreciationAndAmortization",
+          "Depreciation",
+          "AmortizationOfIntangibleAssets"
+        ]
+      },
+
+      "restructuring": {
+        "label": "Restructuring Charges",
+        "balance": "debit",
+        "candidates": [
+          "RestructuringCharges",
+          "RestructuringCostsAndAssetImpairmentCharges",
+          "RestructuringSettlementAndImpairmentProvisions"
+        ]
+      },
+
+      "total_operating_expenses": {
+        "label": "Total Operating Expenses",
+        "balance": "debit",
+        "is_total": true,
+        "candidates": [
+          "OperatingExpenses",
+          "CostsAndExpenses"
+        ]
+      },
+
+      "operating_income": {
+        "label": "Operating Income (Loss)",
+        "balance": "credit",
+        "is_subtotal": true,
+        "candidates": [
+          "OperatingIncomeLoss",
+          "IncomeLossFromContinuingOperationsBeforeInterestExpenseInterestIncomeIncomeTaxesExtraordinaryItemsNoncontrollingInterestsNet"
+        ]
+      }
+    },
+
+    "non_operating": {
+      "_label": "Non-Operating Income / Expense",
+      "_is_section": true,
+
+      "interest_expense": {
+        "label": "Interest Expense",
+        "balance": "debit",
+        "candidates": [
+          "InterestExpense",
+          "InterestExpenseDebt",
+          "InterestAndDebtExpense",
+          "FinanceLeaseInterestExpense"
+        ]
+      },
+
+      "interest_income": {
+        "label": "Interest Income",
+        "balance": "credit",
+        "candidates": [
+          "InterestIncomeOperating",
+          "InterestAndDividendIncomeOperating",
+          "InvestmentIncomeInterest",
+          "InterestIncome"
+        ]
+      },
+
+      "other_nonoperating": {
+        "label": "Other Non-Operating Income (Expense)",
+        "balance": "credit",
+        "candidates": [
+          "NonoperatingIncomeExpense",
+          "OtherNonoperatingIncomeExpense",
+          "OtherNonoperatingIncome"
+        ]
+      },
+
+      "income_before_tax": {
+        "label": "Income (Loss) Before Income Taxes",
+        "balance": "credit",
+        "is_subtotal": true,
+        "candidates": [
+          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic"
+        ]
+      }
+    },
+
+    "taxes_and_net_income": {
+      "_label": "Taxes and Net Income",
+      "_is_section": true,
+
+      "income_tax_expense": {
+        "label": "Income Tax Expense (Benefit)",
+        "balance": "debit",
+        "candidates": [
+          "IncomeTaxExpenseBenefit",
+          "CurrentIncomeTaxExpenseBenefit",
+          "IncomeTaxesPaidNet"
+        ]
+      },
+
+      "net_income": {
+        "label": "Net Income (Loss)",
+        "balance": "credit",
+        "is_total": true,
+        "note": "Flows into RetainedEarningsAccumulatedDeficit on balance sheet",
+        "candidates": [
+          "NetIncomeLoss",
+          "NetIncomeLossAvailableToCommonStockholdersBasic",
+          "ProfitLoss",
+          "IncomeLossFromContinuingOperations",
+          "NetIncomeLossAttributableToParent"
+        ]
+      },
+
+      "eps_basic": {
+        "label": "Earnings Per Share, Basic",
+        "balance": null,
+        "type": "perShare",
+        "candidates": [
+          "EarningsPerShareBasic"
+        ]
+      },
+
+      "eps_diluted": {
+        "label": "Earnings Per Share, Diluted",
+        "balance": null,
+        "type": "perShare",
+        "candidates": [
+          "EarningsPerShareDiluted"
+        ]
+      },
+
+      "shares_basic": {
+        "label": "Weighted Average Shares Outstanding, Basic",
+        "balance": null,
+        "type": "shares",
+        "candidates": [
+          "WeightedAverageNumberOfSharesOutstandingBasic"
+        ]
+      },
+
+      "shares_diluted": {
+        "label": "Weighted Average Shares Outstanding, Diluted",
+        "balance": null,
+        "type": "shares",
+        "candidates": [
+          "WeightedAverageNumberOfDilutedSharesOutstanding"
+        ]
+      }
+    }
+  }
+}

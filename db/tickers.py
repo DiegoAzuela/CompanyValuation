@@ -2,11 +2,6 @@
 """
 Description: Ticker CRUD operations for the local SQLite database.
 """
-
-#!/usr/bin/env python3
-"""
-Description: Ticker CRUD operations for the local SQLite database.
-"""
 from .database import TickerDatabase
 from typing import Optional
 

@@ -18,43 +18,73 @@
 - ```py .\main.py```
 
 ## **DOCUMENTATION**
-- SEC Developer Page: https://www.sec.gov/about/developer-resources
-    - SEC API: https://www.sec.gov/search-filings/edgar-application-programming-interfaces (use this to determine what API to use)
-        - SEC API Overview: https://www.sec.gov/files/edgar/filer-information/api-overview.pdf
-        - Check "Other Sources": https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data
-            - Financial Statements: https://www.sec.gov/files/financial-statement-data-sets.pdf
-    - SEC Tickers: https://www.sec.gov/files/company_tickers.json
-    - SEC CIK-Company Mapping: https://www.sec.gov/include/ticker.txt
-    - SEC Dataset: https://www.sec.gov/files/financial-statement-data-sets.pdf
-    - SEC Sample Company Facts: https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
-    - SEC Timestamps Explained: https://www.sec.gov/files/edgar/pds_dissemination_spec.pdf
-    - SEC FullText Review: https://www.sec.gov/edgar/searchedgar/edgarfulltextfaq.htm
+- SEC Data
+    - [SEC Tickers](https://www.sec.gov/files/company_tickers.json)
+    - [SEC CIK-Company Mapping](https://www.sec.gov/include/ticker.txt)
+    - [Developer Page](https://www.sec.gov/about/developer-resources)
+    - [SEC API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) (use this to determine what API to use)
+        - [SEC API SDK](https://api.edgarfiling.sec.gov/docs/index.html)    
+        - [SEC Sample Company Facts](https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json)
+        - [SEC Sample Concept - Accounts Payable](https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/AccountsPayableCurrent.json) 
+        - [Frames](data.sec.gov/api/xbrl/frames/)
+        - [Taxonomies](https://www.sec.gov/data-research/structured-data/taxonomies-schemas/standard-taxonomies)
+            - [Operating Companies](https://www.sec.gov/data-research/structured-data/taxonomies-schemas/standard-taxonomies/operating-companies)
+                - [US GAAP](https://fasb.org/projects/fasb-taxonomies)
+            - [Investment Companies](https://www.sec.gov/data-research/structured-data/taxonomies-schemas/standard-taxonomies/investment-companies)
+            - [Self-Regulatory Organizations](https://www.sec.gov/data-research/standard-taxonomies/self-regulatory-organizations)
+            - [Security-Based Swap Entities](https://www.sec.gov/data-research/standard-taxonomies/security-based-swap-data-repositories-and-execution-facilities)
+            - [Nationally Recognized Statistical Rating Organizations](https://www.sec.gov/data-research/standard-taxonomies/nationally-recognized-statistical-rating-organizations)
+
+
+- CONCEPTS EXPLAINED
+    - [Balance Sheet](https://www.sec.gov/files/balancesheet-building-blocks.pdf)
+    - [Income Statement](https://www.sec.gov/files/income-statement-building-blocks.pdf)
+    - [Various](https://www.sec.gov/resources-small-businesses/glossary#FinStatements)
 - OPEN INSIDER: http://openinsider.com/
 - HOW TO SEE DB:
     - Download DB Browser for SQLite — https://sqlitebrowser.org/dl/
     - Open DB Browser --> File → Open Database --> Browse Data tab
 
+## **LIMITATIONS**
+- Current max request rate: 10 requests/second.
+
 ## **BASEPLAN**
 ```text
 CompanyValuation/
 │
-├── constants.py              # Stores the API endpoint constants
-├── utils.py                  # Helper functions (e.g., URL building)
-├── alpha_vantage_client.py   # Class to handle Alpha Vantage API interactions
+├── constants.py                   # API endpoint constants
 │
-├── valuation_models/         # Folder for your valuation models (DCF, etc.)
+├── storage/                       # All static/persisted data files
+│   ├── tickers.db                 # CIK:ticker SQLite database
+│   └── taxonomies_and_concepts.json  # SEC XBRL taxonomy map (2026)
+│
+├── db/                            # Database access layer
 │   ├── __init__.py
-│   ├── dcf.py                # DCF (Discounted Cash Flow) valuation model
-│   └── multiples.py          # Other models (e.g., PE, EV/EBITDA)
+│   ├── database.py                # Init, connection, utility functions
+│   └── tickers.py                 # Ticker CRUD operations
 │
-├── organization/
-│   └── pdfconversion.py      # Aligning everything in a PDF
+├── data_sources/                  # External API integrations
+│   ├── __init__.py
+│   └── sec.py                     # EDGAR API calls (frames, concepts, facts)
+│
+├── financial_statements/          # Builds structured statements from raw SEC data
+│   ├── __init__.py
+│   ├── balance_sheet.py           # Assembles balance sheet from XBRL concepts
+│   └── income_statement.py        # Assembles income statement from XBRL concepts
+│
+├── valuation_models/              # Valuation logic
+│   ├── __init__.py
+│   ├── dcf_valuation.py
+│   └── multiples.py
+│
+├── formatting/
+│   └── pdf_conversion.py
 │
 ├── communication/
-│   └── whatsapp.py           # Sending message to my whatsapp
+│   └── delivery.py
 │
-├── main.py                   # Main entry point to run the script
-└── requirements.txt          # Required Python packages (requests, numpy, etc.)
+├── main.py
+└── requirements.txt
 ```
 
 ## **WHERE TO HOST**
@@ -66,6 +96,9 @@ CompanyValuation/
         1. DONE - CIK-Ticker Mapping: https://www.sec.gov/include/ticker.txt
             - data/tickers.db stores the data 
         2. NEXT STEPS: SEC API: Pull Financials
+            - companyConcept a subset of companyFacts
+            - can we parse based on date? 
+            - define what concepts are important for each valuation model
         3. Parse Info: XBRL Parser
         4. Normalized financial database
         5. Valuation engine
@@ -82,4 +115,4 @@ CompanyValuation/
             1. Take a Ticker from the S&P list
             2. Take the Ticker and run DCF valuation
             3. Take the information and format it in PDF
-            4. Share pdf in whatsapp and/or gmail
+            4. Share pdf in whatsapp and/or gmail   
