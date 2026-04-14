@@ -15,19 +15,9 @@ Usage:
     total_assets = bs.get_total_assets()
     print(bs.is_balanced())
 """
-
-import json
-import os
-from enum import Enum
+#!/usr/bin/env python3
 from typing import Optional, Union
-
 from data_sources.sec import SecData
-from financial_statements import FinancialStatement
-
-
-
-# financial_statements/balance_sheet.py
-
 from financial_statements import FinancialStatement, Period
 
 
@@ -35,8 +25,12 @@ class BalanceSheet(FinancialStatement):
 
     _SECTIONS = FinancialStatement._CONCEPTS['balance_sheet']
 
-    def __init__(self, cik: str, year: int, period: Period | str = Period.Q4):
+    def __init__(self, cik: str, year: int, period: Union[Period, str] = Period.Q4):
         super().__init__(cik, year, period)
+
+    # ------------------------------------------------------------------
+    # Frame + concept resolution
+    # ------------------------------------------------------------------
 
     def _build_frame_string(self) -> str:
         """
@@ -54,23 +48,47 @@ class BalanceSheet(FinancialStatement):
 
     def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float]]:
         """
-        Tries each candidate XBRL tag in order and returns the first match
-        found for this instance's CIK and frame.
+        Tries each candidate XBRL tag in order via the company concept
+        endpoint and returns the first match for this CIK and target date.
 
         Returns:
             (matched_tag, value) — or (None, None) if no candidate matched.
         """
-        frame_str = self._build_frame_string()
         for tag in candidates:
-            result = SecData.get_concept_frameAndCik(
-                cik=self.cik,
-                taxonomy=self._TAXONOMY,
-                concept=tag,
-                frame=frame_str
-            )
-            if result and result.get('val') is not None:
-                return tag, result['val']
+            val = self._resolve_from_company_concept(tag)
+            if val is not None:
+                return tag, val
         return None, None
+
+    def _resolve_from_company_concept(self, concept: str) -> Optional[float]:
+        """
+        Fetches the full company concept history and finds the value
+        whose period-end matches the target date for this instance.
+        """
+        data = SecData.get_concept(
+            cik=self.cik,
+            taxonomy=self._TAXONOMY,
+            concept=concept
+        )
+        if not data:
+            return None
+
+        units = data.get('units', {}).get('USD', [])
+        if not units:
+            return None
+
+        target_date = self._get_target_date()
+
+        matches = [
+            e for e in units
+            if e.get('end') == target_date
+            and e.get('form') in ('10-K', '10-Q', '10-K/A', '10-Q/A')  # include amendments
+        ]
+        if not matches:
+            return None
+
+        matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
+        return matches[0].get('val')
 
     # ------------------------------------------------------------------
     # Build
@@ -84,12 +102,20 @@ class BalanceSheet(FinancialStatement):
         Returns self to allow chaining:
             bs = BalanceSheet("320193", 2023, Period.FY).build()
         """
+        _CRITICAL = {
+            'noncurrent_assets':     'total_assets',
+            'current_assets':        'total_current_assets',
+            'current_liabilities':   'total_current_liabilities',
+            'noncurrent_liabilities':'total_liabilities',
+            'stockholders_equity':   'total_stockholders_equity',
+        }
+
         self.data = {
             "meta": {
                 "cik":                self.cik,
                 "year":               self.year,
                 "period":             self.period.value,
-                "frame":              self._build_frame_string(),
+                "frame":              self._get_target_date(),
                 "status":             "ok",
                 "missing_line_items": []
             }
@@ -113,7 +139,8 @@ class BalanceSheet(FinancialStatement):
                         'section':          section_key,
                         'line':             line_key,
                         'label':            line.get('label'),
-                        'candidates_tried': candidates
+                        'candidates_tried': candidates,
+                        'reason':           'not_filed'  # vs 'no_match' if we later distinguish
                     })
 
                 self.data[section_key][line_key] = {
@@ -128,6 +155,12 @@ class BalanceSheet(FinancialStatement):
 
         if self.data['meta']['missing_line_items']:
             self.data['meta']['status'] = 'partial'
+
+        critical_missing = any(
+            self.data.get(section, {}).get(line, {}).get('val') is None
+            for section, line in _CRITICAL.items()
+        )
+        self.data['meta']['status'] = 'partial' if critical_missing else 'ok'
 
         return self
 
@@ -223,7 +256,6 @@ class BalanceSheet(FinancialStatement):
                 prefix  = "  >>  " if is_total else "       "
                 print(f"{prefix}{label:<45} {val_str}   [{tag}]")
 
-        # Derived metrics
         print(f"\n  {'─'*50}")
         print(f"  Derived Metrics")
         print(f"  {'─'*50}")

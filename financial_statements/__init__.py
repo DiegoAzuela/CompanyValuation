@@ -6,8 +6,9 @@ Description: Base class for all financial statements
 
 import json
 import os
+
 from enum import Enum
-from typing import Optional
+from typing import Union, Optional
 
 from data_sources.sec import SecData
 
@@ -50,11 +51,12 @@ class FinancialStatement:
     # Construction
     # ------------------------------------------------------------------
 
-    def __init__(self, cik: str, year: int, period: Period | str):
-        self.cik    = cik
-        self.year   = year
-        self.period = Period(period.upper()) if isinstance(period, str) else period
-        self.data:  dict = {}
+    def __init__(self, cik: str, year: int, period: Union[Period, str] = Period.Q4):
+        self.cik          = cik
+        self.year         = year
+        self.period       = Period(period.upper()) if isinstance(period, str) else period
+        self.data:  dict  = {}
+        self._target_date: Optional[str] = None  # cached after first call
 
     # ------------------------------------------------------------------
     # Frame string — overridden by each subclass
@@ -113,6 +115,47 @@ class FinancialStatement:
                 return tag, result['val']
 
         return None, None
+    
+    def _get_target_date(self) -> str:
+        """
+        Infers the fiscal year end date by finding the most recent 10-K
+        filing for this CIK that ends within the target calendar year.
+        Handles non-calendar fiscal years (e.g. Apple FY ends Sept 30).
+        Result is cached so the network call only happens once per build.
+        """
+        if self._target_date is not None:
+            return self._target_date
+
+        period_key = 'Q4' if self.period == Period.FY else self.period.value
+
+        if period_key != 'Q4':
+            quarter_end = {
+                'Q1': f"{self.year}-03-31",
+                'Q2': f"{self.year}-06-30",
+                'Q3': f"{self.year}-09-30",
+            }
+            self._target_date = quarter_end[period_key]
+            return self._target_date
+
+        data = SecData.get_concept(
+            cik=self.cik,
+            taxonomy=self._TAXONOMY,
+            concept='Assets'
+        )
+        units = data.get('units', {}).get('USD', [])
+        annual_filings = [
+            e for e in units
+            if e.get('form') == '10-K'
+            and e.get('end', '').startswith(str(self.year))
+        ]
+        if annual_filings:
+            annual_filings.sort(key=lambda e: e.get('filed', ''), reverse=True)
+            self._target_date = annual_filings[0]['end']
+        else:
+            self._target_date = f"{self.year}-12-31"
+
+        return self._target_date
+
 
     def __repr__(self) -> str:
         status = self.data.get('meta', {}).get('status', 'not built') if self.data else 'not built'

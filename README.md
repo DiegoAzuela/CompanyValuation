@@ -27,6 +27,7 @@
         - [SEC Sample Company Facts](https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json)
         - [SEC Sample Concept - Accounts Payable](https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/AccountsPayableCurrent.json) 
         - [Frames](data.sec.gov/api/xbrl/frames/)
+            - [Sample Frame](https://data.sec.gov/api/xbrl/frames/us-gaap/AccountsPayableCurrent/USD/CY2019Q1I.json)
         - [Taxonomies](https://www.sec.gov/data-research/structured-data/taxonomies-schemas/standard-taxonomies)
             - [Operating Companies](https://www.sec.gov/data-research/structured-data/taxonomies-schemas/standard-taxonomies/operating-companies)
                 - [US GAAP](https://fasb.org/projects/fasb-taxonomies)
@@ -52,8 +53,6 @@
 ```text
 CompanyValuation/
 │
-├── constants.py                   # API endpoint constants
-│
 ├── storage/                       # All static/persisted data files
 │   ├── tickers.db                 # CIK:ticker SQLite database
 │   └── taxonomies_and_concepts.json  # SEC XBRL taxonomy map (2026)
@@ -67,7 +66,7 @@ CompanyValuation/
 │   ├── __init__.py
 │   └── sec.py                     # EDGAR API calls (frames, concepts, facts)
 │
-├── financial_statements/          # Builds structured statements from raw SEC data
+├── financial_statements/          # Builds structured statements from SEC data
 │   ├── __init__.py
 │   ├── balance_sheet.py           # Assembles balance sheet from XBRL concepts
 │   └── income_statement.py        # Assembles income statement from XBRL concepts
@@ -78,9 +77,12 @@ CompanyValuation/
 │   └── multiples.py
 │
 ├── formatting/
+│   ├── __init__.py
+│   ├── format_financialStatements.py
 │   └── pdf_conversion.py
 │
 ├── communication/
+│   ├── __init__.py
 │   └── delivery.py
 │
 ├── main.py

@@ -124,6 +124,49 @@ class SecData:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def get_fiscal_year_end(cik: str, year: int, period) -> str:
+        """
+        Looks up the actual balance sheet date for a given company/year/period
+        from the SEC submissions endpoint, handling non-calendar fiscal years.
+
+        Falls back to calendar quarter-end dates if submissions lookup fails.
+        """
+        from financial_statements import Period  # avoid circular import
+
+        fallback = {
+            'Q1': f"{year}-03-31",
+            'Q2': f"{year}-06-30",
+            'Q3': f"{year}-09-30",
+            'Q4': f"{year}-12-31",
+            'FY': f"{year}-12-31",
+        }
+        period_key = 'Q4' if period == Period.FY else period.value
+
+        try:
+            config = SecData._load_config()
+            cik_padded = SecData.fix_cik(cik)
+            url = config['secData']['url_submissions'].format(cik=cik_padded)
+            response = requests.get(url, headers=SecData._get_headers())
+            response.raise_for_status()
+            data = response.json()
+
+            filings = data.get('filings', {}).get('recent', {})
+            forms       = filings.get('form', [])
+            report_dates = filings.get('reportDate', [])
+
+            # Find 10-K filings where the report year matches
+            target_form = '10-K' if period_key == 'Q4' else '10-Q'
+            for form, date in zip(forms, report_dates):
+                if form == target_form and date.startswith(str(year)):
+                    return date  # e.g. "2023-09-30" for Apple FY2023
+
+        except Exception as e:
+            print(f"[SecData] Falling back to calendar date for CIK {cik}: {e}")
+
+        return fallback[period_key]
+
+
+    @staticmethod
     def ticker_list() -> list:
         """
         Fetches the full list of public company tickers and CIKs from the SEC.
