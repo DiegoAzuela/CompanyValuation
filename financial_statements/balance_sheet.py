@@ -29,68 +29,6 @@ class BalanceSheet(FinancialStatement):
         super().__init__(cik, year, period)
 
     # ------------------------------------------------------------------
-    # Frame + concept resolution
-    # ------------------------------------------------------------------
-
-    def _build_frame_string(self) -> str:
-        """
-        Balance sheets are always point-in-time (instant), frames end in 'I'.
-        FY is a convenience alias for Q4 — there is no CY{year}I in the API.
-
-            Q1 → CY{year}Q1I
-            Q2 → CY{year}Q2I
-            Q3 → CY{year}Q3I
-            Q4 → CY{year}Q4I
-            FY → CY{year}Q4I
-        """
-        quarter = "Q4" if self.period == Period.FY else self.period.value
-        return f"CY{self.year}{quarter}I"
-
-    def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float]]:
-        """
-        Tries each candidate XBRL tag in order via the company concept
-        endpoint and returns the first match for this CIK and target date.
-
-        Returns:
-            (matched_tag, value) — or (None, None) if no candidate matched.
-        """
-        for tag in candidates:
-            val = self._resolve_from_company_concept(tag)
-            if val is not None:
-                return tag, val
-        return None, None
-
-    def _resolve_from_company_concept(self, concept: str) -> Optional[float]:
-        """
-        Fetches the full company concept history and finds the value
-        whose period-end matches the target date for this instance.
-        """
-        data = SecData.get_concept(
-            cik=self.cik,
-            taxonomy=self._TAXONOMY,
-            concept=concept
-        )
-        if not data:
-            return None
-
-        units = data.get('units', {}).get('USD', [])
-        if not units:
-            return None
-
-        target_date = self._get_target_date()
-
-        matches = [
-            e for e in units
-            if e.get('end') == target_date
-            and e.get('form') in ('10-K', '10-Q', '10-K/A', '10-Q/A')  # include amendments
-        ]
-        if not matches:
-            return None
-
-        matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
-        return matches[0].get('val')
-
-    # ------------------------------------------------------------------
     # Build
     # ------------------------------------------------------------------
 

@@ -36,6 +36,7 @@ class FinancialStatement:
     """
 
     _CONCEPTS_PATH = os.path.join(os.path.dirname(__file__), '..', 'storage', 'taxonomies_and_concepts.json')
+    
     with open(_CONCEPTS_PATH, 'r') as _f:
         _CONCEPTS: dict = json.load(_f)
 
@@ -59,63 +60,18 @@ class FinancialStatement:
         self._target_date: Optional[str] = None  # cached after first call
 
     # ------------------------------------------------------------------
-    # Frame string — overridden by each subclass
-    # ------------------------------------------------------------------
-
-    def _build_frame_string(self) -> str:
-        """
-        Builds the SEC frame string for this statement type and period.
-        Must be overridden by subclasses since balance sheets use instant
-        frames (ending in 'I') and income statements use duration frames.
-        """
-        raise NotImplementedError("Subclasses must implement _build_frame_string()")
-
-    # ------------------------------------------------------------------
     # Core fallback resolver — shared by all subclasses
     # ------------------------------------------------------------------
-
-    def _resolve_concept(
-        self,
-        candidates: list[str],
-        line_type: str = 'monetary'
-    ) -> tuple[Optional[str], Optional[float]]:
-        """
-        Tries each candidate XBRL tag in order and returns the first match
-        found for this instance's CIK, frame, and unit.
-
-        The unit is derived from the line item's type field in the JSON:
-            monetary  → USD          (default — balance sheet and P&L amounts)
-            perShare  → USD/shares   (EPS concepts)
-            shares    → shares       (weighted average share counts)
-
-        Args:
-            candidates: Ordered list of XBRL tags to try, from taxonomies_and_concepts.json
-            line_type:  Type field from the concept map entry — 'monetary', 'perShare', 'shares'
-
-        Returns:
-            (matched_tag, value) — or (None, None) if no candidate matched.
-        """
-        unit_map = {
-            'monetary': 'USD',
-            'perShare': 'USD/shares',
-            'shares':   'shares'
-        }
-        unit      = unit_map.get(line_type, 'USD')
-        frame_str = self._build_frame_string()
-
-        for tag in candidates:
-            result = SecData.get_concept_frameAndCik(
-                cik=self.cik,
-                taxonomy=self._TAXONOMY,
-                concept=tag,
-                frame=frame_str,
-                unit=unit
-            )
-            if result and result.get('val') is not None:
-                return tag, result['val']
-
-        return None, None
-    
+    def __repr__(self) -> str:
+        status = self.data.get('meta', {}).get('status', 'not built') if self.data else 'not built'
+        return (
+            f"{self.__class__.__name__}("
+            f"cik={self.cik}, "
+            f"year={self.year}, "
+            f"period={self.period.value}, "
+            f"status={status})"
+        )
+        
     def _get_target_date(self) -> str:
         """
         Infers the fiscal year end date by finding the most recent 10-K
@@ -157,12 +113,49 @@ class FinancialStatement:
         return self._target_date
 
 
-    def __repr__(self) -> str:
-        status = self.data.get('meta', {}).get('status', 'not built') if self.data else 'not built'
-        return (
-            f"{self.__class__.__name__}("
-            f"cik={self.cik}, "
-            f"year={self.year}, "
-            f"period={self.period.value}, "
-            f"status={status})"
+    # ------------------------------------------------------------------
+    # Frame + concept resolution
+    # ------------------------------------------------------------------
+    def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float]]:
+        """
+        Tries each candidate XBRL tag in order via the company concept
+        endpoint and returns the first match for this CIK and target date.
+
+        Returns:
+            (matched_tag, value) — or (None, None) if no candidate matched.
+        """
+        for tag in candidates:
+            val = self._resolve_from_company_concept(tag)
+            if val is not None:
+                return tag, val
+        return None, None
+
+    def _resolve_from_company_concept(self, concept: str) -> Optional[float]:
+        """
+        Fetches the full company concept history and finds the value
+        whose period-end matches the target date for this instance.
+        """
+        data = SecData.get_concept(
+            cik=self.cik,
+            taxonomy=self._TAXONOMY,
+            concept=concept
         )
+        if not data:
+            return None
+
+        units = data.get('units', {}).get('USD', [])
+        if not units:
+            return None
+
+        target_date = self._get_target_date()
+
+        matches = [
+            e for e in units
+            if e.get('end') == target_date
+            and e.get('form') in ('10-K', '10-Q', '10-K/A', '10-Q/A')  # include amendments
+        ]
+        if not matches:
+            return None
+
+        matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
+        return matches[0].get('val')
