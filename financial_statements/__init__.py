@@ -43,15 +43,15 @@ class FinancialStatement:
     _TAXONOMY: str = _CONCEPTS['_meta']['taxonomy']  # "us-gaap"
 
     # ------------------------------------------------------------------
-    # Subclasses must define which section of _CONCEPTS they own
+    # _CONCEPTS and _CRITICAL are overridden by BalanceSheet and IncomeStatement
     # ------------------------------------------------------------------
-
-    _SECTIONS: dict = {}  # overridden by BalanceSheet and IncomeStatement
+    _SECTIONS: dict = {}
+    _CRITICAL: dict = {} 
+    _FINANCIAL_STATEMENT: None
 
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
-
     def __init__(self, cik: str, year: int, period: Union[Period, str] = Period.Q4):
         self.cik          = cik
         self.year         = year
@@ -66,6 +66,7 @@ class FinancialStatement:
         status = self.data.get('meta', {}).get('status', 'not built') if self.data else 'not built'
         return (
             f"{self.__class__.__name__}("
+            f"financial statement={self.financial_statement}"
             f"cik={self.cik}, "
             f"year={self.year}, "
             f"period={self.period.value}, "
@@ -159,3 +160,70 @@ class FinancialStatement:
 
         matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
         return matches[0].get('val')
+    
+    # ------------------------------------------------------------------
+    # Build
+    # ------------------------------------------------------------------
+
+    def build(self):
+        """
+        Iterates over every section and line item in the concept map,
+        resolves values via fallback chains, and populates self.data.
+
+        Returns self to allow chaining:
+            bs = BalanceSheet("320193", 2023, Period.FY).build()
+            is = IncomeStatement("320193", 2023, Period.FY).build()
+        """
+        self.data = {
+            "meta": {
+                "cik":                self.cik,
+                "year":               self.year,
+                "period":             self.period.value,
+                "frame":              self._get_target_date(),
+                "status":             "ok",
+                "missing_line_items": []
+            }
+        }
+
+        for section_key, section in self._SECTIONS.items():
+            if section_key.startswith('_'):
+                continue
+
+            self.data[section_key] = {}
+
+            for line_key, line in section.items():
+                if line_key.startswith('_'):
+                    continue
+
+                candidates    = line.get('candidates', [])
+                tag_used, val = self._resolve_concept(candidates)
+
+                if val is None:
+                    self.data['meta']['missing_line_items'].append({
+                        'section':          section_key,
+                        'line':             line_key,
+                        'label':            line.get('label'),
+                        'candidates_tried': candidates,
+                        'reason':           'not_filed'  # vs 'no_match' if we later distinguish
+                    })
+
+                self.data[section_key][line_key] = {
+                    'label':       line.get('label'),
+                    'tag_used':    tag_used,
+                    'val':         val,
+                    'unit':        'USD',
+                    'balance':     line.get('balance'),
+                    'is_total':    line.get('is_total', False),
+                    'is_subtotal': line.get('is_subtotal', False)
+                }
+
+        if self.data['meta']['missing_line_items']:
+            self.data['meta']['status'] = 'partial'
+
+        critical_missing = any(
+            self.data.get(section, {}).get(line, {}).get('val') is None
+            for section, line in self._CRITICAL.items()
+        )
+        self.data['meta']['status'] = 'partial' if critical_missing else 'ok'
+
+        return self

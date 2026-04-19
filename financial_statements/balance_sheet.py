@@ -24,83 +24,17 @@ from financial_statements import FinancialStatement, Period
 class BalanceSheet(FinancialStatement):
 
     _SECTIONS = FinancialStatement._CONCEPTS['balance_sheet']
+    _CRITICAL = {
+        'noncurrent_assets':     'total_assets',
+        'current_assets':        'total_current_assets',
+        'current_liabilities':   'total_current_liabilities',
+        'noncurrent_liabilities':'total_liabilities',
+        'stockholders_equity':   'total_stockholders_equity',
+    }
 
     def __init__(self, cik: str, year: int, period: Union[Period, str] = Period.Q4):
         super().__init__(cik, year, period)
 
-    # ------------------------------------------------------------------
-    # Build
-    # ------------------------------------------------------------------
-
-    def build(self) -> "BalanceSheet":
-        """
-        Iterates over every section and line item in the concept map,
-        resolves values via fallback chains, and populates self.data.
-
-        Returns self to allow chaining:
-            bs = BalanceSheet("320193", 2023, Period.FY).build()
-        """
-        _CRITICAL = {
-            'noncurrent_assets':     'total_assets',
-            'current_assets':        'total_current_assets',
-            'current_liabilities':   'total_current_liabilities',
-            'noncurrent_liabilities':'total_liabilities',
-            'stockholders_equity':   'total_stockholders_equity',
-        }
-
-        self.data = {
-            "meta": {
-                "cik":                self.cik,
-                "year":               self.year,
-                "period":             self.period.value,
-                "frame":              self._get_target_date(),
-                "status":             "ok",
-                "missing_line_items": []
-            }
-        }
-
-        for section_key, section in self._SECTIONS.items():
-            if section_key.startswith('_'):
-                continue
-
-            self.data[section_key] = {}
-
-            for line_key, line in section.items():
-                if line_key.startswith('_'):
-                    continue
-
-                candidates    = line.get('candidates', [])
-                tag_used, val = self._resolve_concept(candidates)
-
-                if val is None:
-                    self.data['meta']['missing_line_items'].append({
-                        'section':          section_key,
-                        'line':             line_key,
-                        'label':            line.get('label'),
-                        'candidates_tried': candidates,
-                        'reason':           'not_filed'  # vs 'no_match' if we later distinguish
-                    })
-
-                self.data[section_key][line_key] = {
-                    'label':       line.get('label'),
-                    'tag_used':    tag_used,
-                    'val':         val,
-                    'unit':        'USD',
-                    'balance':     line.get('balance'),
-                    'is_total':    line.get('is_total', False),
-                    'is_subtotal': line.get('is_subtotal', False)
-                }
-
-        if self.data['meta']['missing_line_items']:
-            self.data['meta']['status'] = 'partial'
-
-        critical_missing = any(
-            self.data.get(section, {}).get(line, {}).get('val') is None
-            for section, line in _CRITICAL.items()
-        )
-        self.data['meta']['status'] = 'partial' if critical_missing else 'ok'
-
-        return self
 
     # ------------------------------------------------------------------
     # Accessors
@@ -124,6 +58,12 @@ class BalanceSheet(FinancialStatement):
 
     def get_current_liabilities(self) -> Optional[float]:
         return self.get_line_item('current_liabilities', 'total_current_liabilities')
+
+    def get_retained_earnings(self) -> Optional[float]:
+        return self.get_line_item('stockholders_equity', 'retained_earnings')
+
+    def get_cash(self) -> Optional[float]:
+        return self.get_line_item('current_assets', 'cash_and_equivalents')
 
     # ------------------------------------------------------------------
     # Validation & derived metrics
@@ -159,6 +99,14 @@ class BalanceSheet(FinancialStatement):
         if liabilities and equity:
             return liabilities / equity
         return None
+
+    def working_capital(self) -> Optional[float]:
+        """Current Assets minus Current Liabilities — short-term liquidity buffer."""
+        ca = self.get_current_assets()
+        cl = self.get_current_liabilities()
+        if ca is None or cl is None:
+            return None
+        return ca - cl
 
     # ------------------------------------------------------------------
     # Display
@@ -199,8 +147,10 @@ class BalanceSheet(FinancialStatement):
         print(f"  {'─'*50}")
         cr  = self.current_ratio()
         dte = self.debt_to_equity()
-        print(f"       {'Current Ratio':<45} {f'{cr:.2f}x':>21}" if cr  else f"       {'Current Ratio':<45} {'N/A':>21}")
-        print(f"       {'Debt-to-Equity':<45} {f'{dte:.2f}x':>21}" if dte else f"       {'Debt-to-Equity':<45} {'N/A':>21}")
+        wc  = self.working_capital()
+        print(f"       {'Current Ratio':<45} {f'{cr:.2f}x':>21}"   if cr  is not None else f"       {'Current Ratio':<45} {'N/A':>21}")
+        print(f"       {'Debt-to-Equity':<45} {f'{dte:.2f}x':>21}" if dte is not None else f"       {'Debt-to-Equity':<45} {'N/A':>21}")
+        print(f"       {'Working Capital':<45} {'$' + f'{wc:>19,.0f}':>21}" if wc is not None else f"       {'Working Capital':<45} {'N/A':>21}")
 
         missing = meta.get('missing_line_items', [])
         if missing:
