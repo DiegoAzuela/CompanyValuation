@@ -635,5 +635,246 @@
         ]
       }
     }
+  },
+
+  "cash_flow_statement": {
+    "_label": "Statement of Cash Flows",
+    "_equation": "Operating CF + Investing CF + Financing CF = Net Change in Cash",
+
+    "operating_activities": {
+      "_label": "Operating Activities",
+      "_is_section": true,
+
+      "net_income": {
+        "label": "Net Income (Loss)",
+        "balance": "credit",
+        "candidates": [
+          "NetIncomeLoss",
+          "ProfitLoss",
+          "NetIncomeLossAvailableToCommonStockholdersBasic"
+        ]
+      },
+
+      "depreciation_amortization": {
+        "label": "Depreciation and Amortization",
+        "balance": "debit",
+        "candidates": [
+          "DepreciationDepletionAndAmortization",
+          "DepreciationAndAmortization",
+          "Depreciation"
+        ]
+      },
+
+      "stock_based_compensation": {
+        "label": "Stock-Based Compensation",
+        "balance": "debit",
+        "candidates": [
+          "ShareBasedCompensation",
+          "AllocatedShareBasedCompensationExpense",
+          "EmployeeBenefitsAndShareBasedCompensation"
+        ]
+      },
+
+      "deferred_income_tax": {
+        "label": "Deferred Income Tax Expense (Benefit)",
+        "balance": "debit",
+        "candidates": [
+          "DeferredIncomeTaxExpenseBenefit",
+          "DeferredIncomeTaxesAndTaxCredits"
+        ]
+      },
+
+      "change_in_accounts_receivable": {
+        "label": "Change in Accounts Receivable",
+        "balance": "credit",
+        "candidates": [
+          "IncreaseDecreaseInAccountsReceivable",
+          "IncreaseDecreaseInAccountsAndOtherReceivables",
+          "IncreaseDecreaseInReceivables"
+        ]
+      },
+
+      "change_in_inventory": {
+        "label": "Change in Inventory",
+        "balance": "credit",
+        "candidates": [
+          "IncreaseDecreaseInInventories",
+          "IncreaseDecreaseInFIFOInventories"
+        ]
+      },
+
+      "change_in_accounts_payable": {
+        "label": "Change in Accounts Payable",
+        "balance": "debit",
+        "candidates": [
+          "IncreaseDecreaseInAccountsPayable",
+          "IncreaseDecreaseInAccountsPayableAndAccruedLiabilities"
+        ]
+      },
+
+      "change_in_other_working_capital": {
+        "label": "Change in Other Working Capital",
+        "balance": "debit",
+        "candidates": [
+          "IncreaseDecreaseInOtherOperatingLiabilities",
+          "IncreaseDecreaseInOtherOperatingAssets",
+          "IncreaseDecreaseInOtherCurrentLiabilities"
+        ]
+      },
+
+      "operating_cf": {
+        "label": "Net Cash from Operating Activities",
+        "balance": "debit",
+        "is_total": true,
+        "candidates": [
+          "NetCashProvidedByUsedInOperatingActivities"
+        ]
+      }
+    },
+
+    "investing_activities": {
+      "_label": "Investing Activities",
+      "_is_section": true,
+
+      "capex": {
+        "label": "Capital Expenditures",
+        "balance": "credit",
+        "candidates": [
+          "PaymentsToAcquirePropertyPlantAndEquipment",
+          "PaymentsForCapitalImprovements",
+          "AcquisitionsNetOfCashAcquiredAndPurchasesOfBusinesses"
+        ]
+      },
+
+      "acquisitions": {
+        "label": "Acquisitions, Net of Cash",
+        "balance": "credit",
+        "candidates": [
+          "PaymentsToAcquireBusinessesNetOfCashAcquired",
+          "PaymentsToAcquireBusinessesGross"
+        ]
+      },
+
+      "purchases_of_investments": {
+        "label": "Purchases of Investments",
+        "balance": "credit",
+        "candidates": [
+          "PaymentsToAcquireInvestments",
+          "PaymentsToAcquireAvailableForSaleSecurities",
+          "PaymentsToAcquireMarketableSecurities"
+        ]
+      },
+
+      "proceeds_from_investments": {
+        "label": "Proceeds from Sale of Investments",
+        "balance": "debit",
+        "candidates": [
+          "ProceedsFromSaleOfAvailableForSaleSecurities",
+          "ProceedsFromMaturitiesRepaymentsAndCallsOfAvailableForSaleSecurities",
+          "ProceedsFromSaleAndMaturityOfMarketableSecurities",
+          "ProceedsFromSaleOfInvestments"
+        ]
+      },
+
+      "investing_cf": {
+        "label": "Net Cash from Investing Activities",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "NetCashProvidedByUsedInInvestingActivities"
+        ]
+      }
+    },
+
+    "financing_activities": {
+      "_label": "Financing Activities",
+      "_is_section": true,
+
+      "proceeds_from_debt": {
+        "label": "Proceeds from Issuance of Debt",
+        "balance": "debit",
+        "candidates": [
+          "ProceedsFromIssuanceOfLongTermDebt",
+          "ProceedsFromLongTermLinesOfCredit",
+          "ProceedsFromDebtNetOfIssuanceCosts"
+        ]
+      },
+
+      "repayments_of_debt": {
+        "label": "Repayments of Debt",
+        "balance": "credit",
+        "candidates": [
+          "RepaymentsOfLongTermDebt",
+          "RepaymentsOfDebt",
+          "RepaymentsOfLongTermLinesOfCredit"
+        ]
+      },
+
+      "dividends_paid": {
+        "label": "Dividends Paid",
+        "balance": "credit",
+        "candidates": [
+          "PaymentsOfDividends",
+          "PaymentsOfDividendsCommonStock",
+          "PaymentsOfOrdinaryDividends"
+        ]
+      },
+
+      "share_repurchases": {
+        "label": "Repurchase of Common Stock",
+        "balance": "credit",
+        "candidates": [
+          "PaymentsForRepurchaseOfCommonStock",
+          "PaymentsForRepurchaseOfEquity"
+        ]
+      },
+
+      "proceeds_from_stock_issuance": {
+        "label": "Proceeds from Issuance of Common Stock",
+        "balance": "debit",
+        "candidates": [
+          "ProceedsFromIssuanceOfCommonStock",
+          "ProceedsFromStockOptionsExercised",
+          "ProceedsFromIssuanceOfSharesUnderIncentiveAndShareBasedCompensationPlans"
+        ]
+      },
+
+      "financing_cf": {
+        "label": "Net Cash from Financing Activities",
+        "balance": "credit",
+        "is_total": true,
+        "candidates": [
+          "NetCashProvidedByUsedInFinancingActivities"
+        ]
+      }
+    },
+
+    "cash_summary": {
+      "_label": "Cash Summary",
+      "_is_section": true,
+
+      "net_change_in_cash": {
+        "label": "Net Change in Cash and Equivalents",
+        "balance": "debit",
+        "is_subtotal": true,
+        "candidates": [
+          "CashAndCashEquivalentsPeriodIncreaseDecrease",
+          "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+          "CashAndCashEquivalentsPeriodIncreaseDecreaseExcludingExchangeRateEffect"
+        ]
+      },
+
+      "ending_cash": {
+        "label": "Cash and Equivalents, End of Period",
+        "balance": "debit",
+        "is_total": true,
+        "note": "Should match cash_and_equivalents on the Balance Sheet",
+        "candidates": [
+          "CashAndCashEquivalentsAtCarryingValue",
+          "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+          "CashAndCashEquivalents"
+        ]
+      }
+    }
   }
 }
