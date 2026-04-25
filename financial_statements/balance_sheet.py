@@ -139,7 +139,7 @@ class BalanceSheet(FinancialStatement):
                 is_total = line.get('is_total') or line.get('is_subtotal')
 
                 val_str = f"${val:>20,.0f}" if val is not None else f"{'N/A':>21}"
-                prefix  = "  >>  " if is_total else "       "
+                prefix  = "   >>  " if is_total else "       "
                 print(f"{prefix}{label:<45} {val_str}   [{tag}]")
 
         print(f"\n  {'─'*50}")

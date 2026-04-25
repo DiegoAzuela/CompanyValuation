@@ -66,7 +66,6 @@ class FinancialStatement:
         status = self.data.get('meta', {}).get('status', 'not built') if self.data else 'not built'
         return (
             f"{self.__class__.__name__}("
-            f"financial statement={self.financial_statement}"
             f"cik={self.cik}, "
             f"year={self.year}, "
             f"period={self.period.value}, "
@@ -217,13 +216,17 @@ class FinancialStatement:
                     'is_subtotal': line.get('is_subtotal', False)
                 }
 
-        if self.data['meta']['missing_line_items']:
-            self.data['meta']['status'] = 'partial'
-
         critical_missing = any(
             self.data.get(section, {}).get(line, {}).get('val') is None
             for section, line in self._CRITICAL.items()
         )
-        self.data['meta']['status'] = 'partial' if critical_missing else 'ok'
+        has_missing = bool(self.data['meta']['missing_line_items'])
+
+        if critical_missing:
+            self.data['meta']['status'] = 'critical'
+        elif has_missing:
+            self.data['meta']['status'] = 'partial'
+        else:
+            self.data['meta']['status'] = 'ok'
 
         return self
