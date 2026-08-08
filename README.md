@@ -17,6 +17,10 @@
 ## **HOW TO RUN**
 - ```py .\main.py```
 
+## **VALIDAITON DATA**
+- https://www.apple.com/newsroom/pdfs/fy2024-q2/FY24_Q2_Consolidated_Financial_Statements.pdf
+- https://www.apple.com/newsroom/pdfs/fy2025-q2/FY25_Q2_Consolidated_Financial_Statements.pdf
+
 ## **DOCUMENTATION**
 - SEC Data
     - [SEC Tickers](https://www.sec.gov/files/company_tickers.json)
@@ -99,9 +103,10 @@ CompanyValuation/
         1. ✅ Initial CIK-Ticker Mapping
         2. ✅ SEC DATA for Financial Statements
         3. ✅ Financial Statements (balance sheet, income statement, cash flow statement)
-        4. Formatting P1
+        4. Valuation Models
+            - DCF, Earning Power, Fair Value, Trading Multiples, WACC
+        5. Formatting P1
             - Financial Statement reporting
-        5. Valuation engine
         6. Metrics (ROE, P/B, Graham number, etc.)
     - **Integration**
         - Manual

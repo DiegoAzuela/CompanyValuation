@@ -26,7 +26,7 @@ Description: Content of the PDF file will be:
         |               |*_ _ _ _ _ _ _ _ _                |
         |__________________________________________________|
     - Financial Statements (Balance Sheet, Cash Flow Statement, Income Statement)
-    - Valuation Models
+    - Valuation Models (reference - https://valueinvesting.io/AAPL/valuation/intrinsic-value)
 
     - Library for PDF creation --> ReportLab — best for financial reports (recommended)
 """

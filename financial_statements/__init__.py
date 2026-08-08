@@ -41,6 +41,7 @@ class FinancialStatement:
     Subclasses:
       - BalanceSheet  → uses instant frames (CY{year}Q{n}I)
       - IncomeStatement → uses duration frames (CY{year}Q{n} or CY{year})
+      - CashFlowStatment → uses duration frames (CY{year}Q{n} or CY{year})
     """
 
     _CONCEPTS_PATH = os.path.join(os.path.dirname(__file__), '..', 'storage', 'taxonomies_and_concepts.json')
