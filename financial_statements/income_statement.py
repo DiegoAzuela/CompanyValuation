@@ -65,6 +65,9 @@ class IncomeStatement(FinancialStatement):
     def get_net_income(self) -> Optional[float]:
         return self.get_line_item('taxes_and_net_income', 'net_income')
 
+    def get_share_repurchase(self) -> Optional[float]:
+        return self.get_line_item('taxes_and_net_income', 'net_income')
+
     # ------------------------------------------------------------------
     # Derived margins
     # ------------------------------------------------------------------
@@ -182,7 +185,7 @@ class IncomeStatement(FinancialStatement):
             return None
         return (cur_rev > prior_rev) and (cur_cf <= prior_cf_val)
 
-    def reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', dividends_paid: float = 0.0, tolerance: float = 1.0) -> Optional[bool]:
+    def simple_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', dividends_paid: float = 0.0, tolerance: float = 1.0) -> Optional[bool]:
         """
         Retained earnings bridge: NI ≈ RE_current − RE_prior + dividends_paid.
         This is the Statement of Retained Earnings equation expressed as a check.
@@ -191,9 +194,59 @@ class IncomeStatement(FinancialStatement):
         ni  = self.get_net_income()
         re_c = bs_current.get_retained_earnings()
         re_p = bs_prior.get_retained_earnings()
+        print(f"debug: net_income: {ni}, retainedEarningsCurrent: {re_c}, retainedEarningsPrior: {re_p}, dividendsPaid: {dividends_paid}")
         if any(v is None for v in [ni, re_c, re_p]):
             return None
         return abs(ni - (re_c - re_p + dividends_paid)) <= tolerance
+    
+    def full_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', cf: 'CashFlowStatement', dividends_paid: float = 0.0, tolerance: float = 1.0) -> Optional[bool]:
+        """
+        Full retained earnings bridge using the APIC bridge to isolate the RE
+        impact of share repurchases:
+
+            RE_impact_of_repurchases = repurchases + (APIC_c − APIC_p) − SBC − proceeds_from_stock
+            NI ≈ (RE_c − RE_p) + dividends + RE_impact_of_repurchases
+
+        APIC changes from SBC (up), stock proceeds (up), and the retired APIC
+        balance on repurchased shares (down). Solving for that last term isolates
+        how much of the repurchase cash spilled into RE vs absorbed by APIC.
+
+        Falls back to the simple formula (repurchases = 0) when APIC is unavailable.
+        Does not handle the treasury-stock method — those companies do not charge
+        repurchases to RE, so simple_reconciliation() is correct for them.
+        """
+        ni    = self.get_net_income()
+        re_c  = bs_current.get_retained_earnings()
+        re_p  = bs_prior.get_retained_earnings()
+        if any(v is None for v in [ni, re_c, re_p]):
+            return None
+
+        apic_c = bs_current.get_apic()
+        apic_p = bs_prior.get_apic()
+        sh_r   = cf.get_share_repurchased()   or 0.0
+        sbc    = cf.get_sbc()                 or 0.0
+        proc   = cf.get_proceeds_from_stock_issuance() or 0.0
+
+        if apic_c is not None and apic_p is not None:
+            ts_c = bs_current.get_treasury_stock() or 0.0
+            ts_p = bs_prior.get_treasury_stock()   or 0.0
+            if abs(ts_c - ts_p) > tolerance:
+                # Treasury stock method: repurchases accumulate as contra-equity,
+                # so they never touch RE. Simple bridge is correct for these companies.
+                re_impact = 0.0
+            else:
+                # Constructive retirement: excess cost over par+APIC flows into RE.
+                # APIC bridge isolates that portion without needing the equity rollforward.
+                re_impact = sh_r + (apic_c - apic_p) - sbc - proc
+        else:
+            re_impact = sh_r  # fall back to CF amount when APIC unavailable
+
+        print(
+            f"full reconciliation: ni={ni}, re_c={re_c}, re_p={re_p}, "
+            f"dividends={dividends_paid}, sh_r={sh_r}, apic_c={apic_c}, "
+            f"apic_p={apic_p}, sbc={sbc}, proc={proc}, re_impact={re_impact}"
+        )
+        return abs(ni - (re_c - re_p + dividends_paid + re_impact)) <= tolerance
 
     # ------------------------------------------------------------------
     # Display

@@ -98,6 +98,7 @@ CompanyValuation/
         1. Initial CIK-Ticker Mapping
         2. SEC DATA for Financial Statements
         3. NEXT STEPS --> Financial Statements
+            - Write "fullequity_reconciliation"
             - Build balance_sheet and income_statement
         4. Formatting P1
             - Financial Statement reporting

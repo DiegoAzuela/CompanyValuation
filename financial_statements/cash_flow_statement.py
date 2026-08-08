@@ -63,6 +63,15 @@ class CashFlowStatement(FinancialStatement):
 
     def get_ending_cash(self) -> Optional[float]:
         return self.get_line_item('cash_summary', 'ending_cash')
+    
+    def get_share_repurchased(self) -> Optional[float]:
+        return self.get_line_item('financing_activities', 'share_repurchases')
+
+    def get_sbc(self) -> Optional[float]:
+        return self.get_line_item('operating_activities', 'stock_based_compensation')
+
+    def get_proceeds_from_stock_issuance(self) -> Optional[float]:
+        return self.get_line_item('financing_activities', 'proceeds_from_stock_issuance')
 
     # ------------------------------------------------------------------
     # Derived metrics

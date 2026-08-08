@@ -7,10 +7,18 @@ Description: Base class for all financial statements
 import json
 import os
 
+from datetime import datetime as _dt
 from enum import Enum
 from typing import Union, Optional
 
 from data_sources.sec import SecData
+
+
+def _days_between(start: str, end: str) -> int:
+    try:
+        return (_dt.strptime(end, "%Y-%m-%d") - _dt.strptime(start, "%Y-%m-%d")).days
+    except (ValueError, TypeError):
+        return 0
 
 
 class Period(str, Enum):
@@ -84,31 +92,53 @@ class FinancialStatement:
 
         period_key = 'Q4' if self.period == Period.FY else self.period.value
 
-        if period_key != 'Q4':
-            quarter_end = {
-                'Q1': f"{self.year}-03-31",
-                'Q2': f"{self.year}-06-30",
-                'Q3': f"{self.year}-09-30",
-            }
-            self._target_date = quarter_end[period_key]
-            return self._target_date
-
         data = SecData.get_concept(
             cik=self.cik,
             taxonomy=self._TAXONOMY,
             concept='Assets'
         )
         units = data.get('units', {}).get('USD', [])
-        annual_filings = [
-            e for e in units
-            if e.get('form') == '10-K'
-            and e.get('end', '').startswith(str(self.year))
-        ]
-        if annual_filings:
-            annual_filings.sort(key=lambda e: e.get('filed', ''), reverse=True)
-            self._target_date = annual_filings[0]['end']
+
+        # Resolve the fiscal year-end for this CIK/year (used for both FY and quarterly)
+        annual_filings = sorted(
+            [e for e in units
+             if e.get('form') == '10-K'
+             and e.get('end', '').startswith(str(self.year))],
+            key=lambda e: e.get('filed', ''),
+            reverse=True
+        )
+        fy_end = annual_filings[0]['end'] if annual_filings else f"{self.year}-12-31"
+
+        if period_key == 'Q4':
+            self._target_date = fy_end
         else:
-            self._target_date = f"{self.year}-12-31"
+            # Q3 = index 0, Q2 = index 1, Q1 = index 2 of the 3 most recent
+            # 10-Q end dates before the fiscal year-end.  Works for non-calendar
+            # fiscal years (e.g. Apple FY ends Sep; Q2 ends Mar, not Jun 30).
+            quarter_index = {'Q1': 2, 'Q2': 1, 'Q3': 0}[period_key]
+
+            seen: set = set()
+            quarterly_ends: list = []
+            for e in sorted(
+                [e for e in units
+                 if e.get('form') in ('10-Q', '10-Q/A')
+                 and e.get('end', '') < fy_end],
+                key=lambda e: e['end'],
+                reverse=True
+            ):
+                end = e['end']
+                if end not in seen:
+                    seen.add(end)
+                    quarterly_ends.append(end)
+
+            if len(quarterly_ends) > quarter_index:
+                self._target_date = quarterly_ends[quarter_index]
+            else:
+                self._target_date = {
+                    'Q1': f"{self.year}-03-31",
+                    'Q2': f"{self.year}-06-30",
+                    'Q3': f"{self.year}-09-30",
+                }[period_key]
 
         return self._target_date
 
@@ -116,6 +146,12 @@ class FinancialStatement:
     # ------------------------------------------------------------------
     # Frame + concept resolution
     # ------------------------------------------------------------------
+    def _duration_day_range(self) -> tuple[int, int]:
+        """Returns (min_days, max_days) for filtering duration concept entries."""
+        if self.period == Period.FY:
+            return (350, 380)
+        return (75, 105)  # single fiscal quarter
+
     def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float]]:
         """
         Tries each candidate XBRL tag in order via the company concept
@@ -156,6 +192,19 @@ class FinancialStatement:
         ]
         if not matches:
             return None
+
+        # Duration concepts (income statement, cash flow) carry a 'start' field.
+        # EDGAR includes both single-quarter and YTD entries for the same end date,
+        # so filter by expected period length to avoid picking up the YTD entry.
+        duration_matches = [e for e in matches if e.get('start')]
+        if duration_matches:
+            lo, hi = self._duration_day_range()
+            filtered = [
+                e for e in duration_matches
+                if lo <= _days_between(e['start'], e['end']) <= hi
+            ]
+            if filtered:
+                matches = filtered
 
         matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
         return matches[0].get('val')

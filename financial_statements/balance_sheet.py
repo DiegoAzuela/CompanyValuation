@@ -65,6 +65,12 @@ class BalanceSheet(FinancialStatement):
     def get_cash(self) -> Optional[float]:
         return self.get_line_item('current_assets', 'cash_and_equivalents')
 
+    def get_apic(self) -> Optional[float]:
+        return self.get_line_item('stockholders_equity', 'additional_paid_in_capital')
+
+    def get_treasury_stock(self) -> Optional[float]:
+        return self.get_line_item('stockholders_equity', 'treasury_stock')
+
     # ------------------------------------------------------------------
     # Validation & derived metrics
     # ------------------------------------------------------------------
