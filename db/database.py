@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 class TickerDatabase:
-    DB_PATH = Path(__file__).parent.parent / "data" / "tickers.db"
+    DB_PATH = Path(__file__).parent.parent / "storage" / "tickers.db"
     @staticmethod
     def get_connection() -> sqlite3.Connection:
         """Returns a connection to the local SQLite database."""
