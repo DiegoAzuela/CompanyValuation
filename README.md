@@ -67,9 +67,10 @@ CompanyValuation/
 │   └── sec.py                     # EDGAR API calls (frames, concepts, facts)
 │
 ├── financial_statements/          # Builds structured statements from SEC data
-│   ├── __init__.py
+│   ├── __init__.py                # Base class, Period enum, concept resolver
 │   ├── balance_sheet.py           # Assembles balance sheet from XBRL concepts
-│   └── income_statement.py        # Assembles income statement from XBRL concepts
+│   ├── income_statement.py        # Assembles income statement from XBRL concepts
+│   └── cash_flow_statement.py     # Assembles cash flow statement from XBRL concepts
 │
 ├── valuation_models/              # Valuation logic
 │   ├── __init__.py
@@ -95,11 +96,9 @@ CompanyValuation/
 ## TODO
 - **Gameplan:**
     - **Data Manipulation**
-        1. Initial CIK-Ticker Mapping
-        2. SEC DATA for Financial Statements
-        3. NEXT STEPS --> Financial Statements
-            - Write "fullequity_reconciliation"
-            - Build balance_sheet and income_statement
+        1. ✅ Initial CIK-Ticker Mapping
+        2. ✅ SEC DATA for Financial Statements
+        3. ✅ Financial Statements (balance sheet, income statement, cash flow statement)
         4. Formatting P1
             - Financial Statement reporting
         5. Valuation engine

@@ -65,9 +65,6 @@ class IncomeStatement(FinancialStatement):
     def get_net_income(self) -> Optional[float]:
         return self.get_line_item('taxes_and_net_income', 'net_income')
 
-    def get_share_repurchase(self) -> Optional[float]:
-        return self.get_line_item('taxes_and_net_income', 'net_income')
-
     # ------------------------------------------------------------------
     # Derived margins
     # ------------------------------------------------------------------
