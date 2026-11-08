@@ -95,7 +95,9 @@ CompanyValuation/
 │   ├── earnings_capitalization.py # Graham: 15× average earnings
 │   ├── peter_lynch_fairvalue.py   # Lynch: fair P/E = growth + yield
 │   ├── dividend_discount.py       # Gordon DDM + dividend record + buyback-adjusted value
-│   └── trading_multiples.py       # Peer-median P/E, P/B, P/S, EV/EBIT, EV/EBITDA
+│   ├── trading_multiples.py       # Peer-median P/E, P/B, P/S, EV/EBIT, EV/EBITDA
+│   ├── asset_value.py             # Graham NCAV / net-net, liquidation value
+│   └── book_value.py              # Justified P/B (ROE), Graham number
 │
 ├── tests/                         # Offline unit tests (pytest)
 │

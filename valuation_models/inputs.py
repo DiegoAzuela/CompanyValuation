@@ -74,11 +74,15 @@ _METRICS: dict[str, tuple[str, str, str]] = {
     # Balance sheet
     'cash':                       ('bs',  'current_assets',         'cash_and_equivalents'),
     'short_term_investments':     ('bs',  'current_assets',         'short_term_investments'),
+    'accounts_receivable':        ('bs',  'current_assets',         'accounts_receivable'),
+    'inventory':                  ('bs',  'current_assets',         'inventory'),
     'current_assets':             ('bs',  'current_assets',         'total_current_assets'),
     'ppe_net':                    ('bs',  'noncurrent_assets',      'ppe_net'),
+    'operating_lease_rou':        ('bs',  'noncurrent_assets',      'operating_lease_rou'),
     'goodwill':                   ('bs',  'noncurrent_assets',      'goodwill'),
     'intangible_assets':          ('bs',  'noncurrent_assets',      'intangible_assets'),
     'long_term_investments':      ('bs',  'noncurrent_assets',      'long_term_investments'),
+    'deferred_tax_assets':        ('bs',  'noncurrent_assets',      'deferred_tax_assets'),
     'total_assets':               ('bs',  'noncurrent_assets',      'total_assets'),
     'current_liabilities':        ('bs',  'current_liabilities',    'total_current_liabilities'),
     'short_term_debt':            ('bs',  'current_liabilities',    'short_term_debt'),
@@ -93,6 +97,19 @@ _METRICS: dict[str, tuple[str, str, str]] = {
 # Filed as payments (positive outflows) — always use the magnitude
 _ABSOLUTE = {'capex', 'dividends_paid', 'share_repurchases'}
 
+# Long-term investment tags that hold debt securities (bonds, Treasuries, agency
+# paper). These are liquid, so the equity bridge counts them as cash. Any other
+# tag in the long_term_investments chain (LongTermInvestments, equity securities
+# without a market price, investments + receivables) is treated as strategic or
+# illiquid and left out. Per-ticker overrides live in config.json.
+CASH_LIKE_INVESTMENT_TAGS = {
+    'MarketableSecuritiesNoncurrent',
+    'AvailableForSaleSecuritiesNoncurrent',
+    'AvailableForSaleSecuritiesDebtSecuritiesNoncurrent',
+    'DebtSecuritiesAvailableForSaleNoncurrent',
+    'HeldToMaturitySecuritiesNoncurrent',
+}
+
 
 class FinancialHistory:
     """
@@ -104,10 +121,12 @@ class FinancialHistory:
 
     METRICS = tuple(_METRICS)
 
-    def __init__(self, cik: str, years: list[int], data: dict[str, list[Optional[float]]], statements: Optional[dict] = None):
+    def __init__(self, cik: str, years: list[int], data: dict[str, list[Optional[float]]],
+                 statements: Optional[dict] = None, tags: Optional[dict[str, list[Optional[str]]]] = None):
         self.cik        = cik
         self.years      = years
         self._data      = data
+        self._tags      = tags or {}        # metric → XBRL tag that supplied each year's value
         self.statements = statements or {}  # year → {'bs','inc','cf'} for drill-down / reporting
 
     # ------------------------------------------------------------------
@@ -134,6 +153,7 @@ class FinancialHistory:
 
         years: list[int] = []
         data: dict[str, list[Optional[float]]] = {m: [] for m in _METRICS}
+        tags: dict[str, list[Optional[str]]]   = {m: [] for m in _METRICS}
         statements: dict[int, dict] = {}
 
         for year in range(last_year - n_years + 1, last_year + 1):
@@ -151,17 +171,19 @@ class FinancialHistory:
             for metric, (stmt, section, line) in _METRICS.items():
                 val = stmts[stmt].get_line_item(section, line)
                 data[metric].append(abs(val) if val is not None and metric in _ABSOLUTE else val)
+                tags[metric].append(stmts[stmt].data.get(section, {}).get(line, {}).get('tag_used') if val is not None else None)
 
-        return cls(cik, years, data, statements)
+        return cls(cik, years, data, statements, tags)
 
     @classmethod
-    def from_series(cls, years: list[int], series: dict[str, list[Optional[float]]], cik: str = 'manual') -> 'FinancialHistory':
+    def from_series(cls, years: list[int], series: dict[str, list[Optional[float]]], cik: str = 'manual',
+                    tags: Optional[dict[str, list[Optional[str]]]] = None) -> 'FinancialHistory':
         """Builds a history from plain lists — for tests and what-if analysis."""
         data = {m: list(series.get(m, [None] * len(years))) for m in _METRICS}
         for m, vals in data.items():
             if len(vals) != len(years):
                 raise ValueError(f"Series '{m}' has {len(vals)} values for {len(years)} years")
-        return cls(cik, years, data)
+        return cls(cik, years, data, tags=tags)
 
     # ------------------------------------------------------------------
     # Accessors
@@ -175,6 +197,11 @@ class FinancialHistory:
     def latest(self, metric: str) -> Optional[float]:
         """Most recent non-missing value."""
         return next((v for v in reversed(self._data[metric]) if v is not None), None)
+
+    def latest_tag(self, metric: str) -> Optional[str]:
+        """XBRL tag behind latest(metric) — None for hand-built histories."""
+        tags = self._tags.get(metric) or [None] * len(self.years)
+        return next((t for v, t in zip(reversed(self._data[metric]), reversed(tags)) if v is not None), None)
 
     def value_at(self, metric: str, offset: int = 0) -> Optional[float]:
         """Value `offset` years before the latest year (0 = latest). No fallback."""
@@ -342,16 +369,39 @@ class ValuationInputs:
             parts += ['operating_lease_current', 'operating_lease_noncurrent']
         return sum(self.history.value_at(p, offset) or 0.0 for p in parts)
 
+    def long_term_investments_in_cash(self) -> tuple[float, str]:
+        """
+        Long-term investments counted as cash in the equity bridge, and why.
+
+          1. Per-ticker override   config → long_term_investments_overrides {"AAPL": true}
+          2. Global setting        config → long_term_investments_in_cash  true / false
+          3. "auto" (default)      decided by the XBRL tag the company filed:
+                                   debt-security tags count (CASH_LIKE_INVESTMENT_TAGS),
+                                   anything else is treated as strategic and excluded
+        """
+        amount = self.history.latest('long_term_investments')
+        if not amount:
+            return 0.0, 'none reported'
+
+        override = self.assumption('long_term_investments_overrides', {}).get(self.ticker.upper())
+        if override is not None:
+            return (amount, 'included (ticker override)') if override else (0.0, 'excluded (ticker override)')
+
+        mode = self.assumption('long_term_investments_in_cash', 'auto')
+        if mode is True:
+            return amount, 'included (config)'
+        if mode is False:
+            return 0.0, 'excluded (config)'
+
+        tag = self.history.latest_tag('long_term_investments')
+        if tag in CASH_LIKE_INVESTMENT_TAGS:
+            return amount, f'included: {tag} (debt securities)'
+        return 0.0, f"excluded: {tag or 'unknown tag'} (strategic / illiquid)"
+
     def cash_and_investments(self) -> float:
-        """
-        Cash + short-term investments. Long-term marketable securities are
-        only added when the config opts in — they are liquid for some
-        companies (Apple) and strategic/illiquid for others.
-        """
-        parts = ['cash', 'short_term_investments']
-        if self.assumption('include_long_term_investments_in_cash', False):
-            parts.append('long_term_investments')
-        return sum(self.history.latest(p) or 0.0 for p in parts)
+        """Cash + short-term investments + any long-term investments that count as cash."""
+        cash = sum(self.history.latest(p) or 0.0 for p in ('cash', 'short_term_investments'))
+        return cash + self.long_term_investments_in_cash()[0]
 
     def net_debt(self) -> float:
         return self.total_debt() - self.cash_and_investments()
@@ -360,6 +410,32 @@ class ValuationInputs:
         if self.price is None or not self.shares_outstanding:
             return None
         return self.price * self.shares_outstanding
+
+    def equity_bridge(self, enterprise_value: float) -> list[tuple[str, float, str]]:
+        """
+        Line-by-line enterprise → equity value as (label, amount, note), for display.
+        The last row is the equity value.
+        """
+        lti, reason = self.long_term_investments_in_cash()
+        leases = 'incl. operating leases' if self.assumption('include_operating_leases_in_debt', True) else ''
+        rows = [
+            ('Enterprise value',         enterprise_value,                                         ''),
+            ('− Debt',                   -self.total_debt(),                                       leases),
+            ('+ Cash and equivalents',   self.history.latest('cash') or 0.0,                      ''),
+            ('+ Short-term investments', self.history.latest('short_term_investments') or 0.0,     ''),
+            ('+ Long-term investments',  lti,                                                      reason),
+        ]
+        rows.append(('= Equity value', sum(v for _, v, _ in rows), ''))
+        return rows
+
+    def total_liabilities(self) -> Optional[float]:
+        """Latest total liabilities; derived as assets − equity when the total is not tagged."""
+        h = self.history
+        liabilities = h.value_at('total_liabilities', 0)
+        if liabilities is not None:
+            return liabilities
+        assets, equity = h.value_at('total_assets', 0), h.value_at('total_equity', 0)
+        return assets - equity if assets is not None and equity is not None else None
 
     def enterprise_value(self) -> Optional[float]:
         mc = self.market_cap()

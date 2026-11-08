@@ -13,6 +13,8 @@ from valuation_models.earnings_capitalization import AverageEarningsCapitalizati
 from valuation_models.peter_lynch_fairvalue import PeterLynchFairValue
 from valuation_models.dividend_discount import DividendDiscountModel
 from valuation_models.trading_multiples import TradingMultiples
+from valuation_models.asset_value import NetCurrentAssetValue, LiquidationValue
+from valuation_models.book_value import JustifiedPriceToBook, GrahamNumber
 from dotenv import load_dotenv
 import os
 import sys
@@ -24,13 +26,13 @@ sys.stdout.reconfigure(encoding='utf-8')
 TickerDatabase.init_db()
 SecData.seed_db()  # only re-downloads when the local list is older than 7 days
 
-# Actual financial statements - https://www.apple.com/newsroom/pdfs/fy2025-q2/FY25_Q2_Consolidated_Financial_Statements.pdf
+# Latest filing: FY2026 10-K (fiscal year ended 2026-09-26, filed 2026-11-03)
 load_dotenv()
 taxonomy = "us-gaap"
 TICKER = "AAPL"
 CIK  = "320193"  # Apple
-YEAR = 2025
-PERIOD = Period.Q2
+YEAR = 2026
+PERIOD = Period.FY
 
 # ── Valuation inputs ──────────────────────────────────────────────────
 # No market data source yet: set the current price and peer prices by hand.
@@ -91,6 +93,7 @@ if __name__ == "__main__":
 
     WACC(inputs).summarize()
     DiscountedCashFlow(inputs).summarize()
+    LiquidationValue(inputs).summarize()
 
     models = [
         DiscountedCashFlow(inputs),
@@ -99,6 +102,10 @@ if __name__ == "__main__":
         PeterLynchFairValue(inputs),
         DividendDiscountModel(inputs),
         TradingMultiples(inputs, peers=PEERS),
+        JustifiedPriceToBook(inputs),
+        GrahamNumber(inputs),
+        NetCurrentAssetValue(inputs),
+        LiquidationValue(inputs),
     ]
     results = [m.value() for m in models]
 

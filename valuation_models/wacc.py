@@ -26,6 +26,7 @@ Usage:
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Optional
 
 from valuation_models.inputs import ValuationInputs
@@ -111,6 +112,19 @@ class WACC:
                 return rating, spread
         return ('D', table[-1][2]) if table else ('n/a', self.inputs.assumption('default_credit_spread', 0.015))
 
+    def spread_table_warning(self, today: Optional[date] = None) -> Optional[str]:
+        """Warning when the spread table's as_of month is older than spreads_max_age_months."""
+        as_of = self.inputs.assumption('synthetic_rating_spreads_as_of')
+        if not as_of:
+            return "Spread table has no as_of date — check it against Damodaran's latest ratings data"
+        year, month = (int(x) for x in as_of.split('-')[:2])
+        today = today or date.today()
+        age   = (today.year - year) * 12 + today.month - month
+        limit = self.inputs.assumption('spreads_max_age_months', 15)
+        if age > limit:
+            return f"Spread table is from {as_of} ({age} months old) — refresh it from Damodaran's ratings data"
+        return None
+
     def implied_coupon_rate(self) -> Optional[float]:
         """Latest-year interest / average debt (reference only). None if not filed in the latest year."""
         interest = self.history.value_at('interest_expense', 0)
@@ -138,6 +152,8 @@ class WACC:
             rating, spread = 'n/a', i.assumption('default_credit_spread', 0.015)
             if self.financial_debt(0) > 0:
                 warnings.append(f"No interest expense in the history — using default credit spread {spread:.2%}")
+        if coverage is not None and (stale := self.spread_table_warning()):
+            warnings.append(stale)
         kd_pre   = i.risk_free_rate + spread
         kd_after = kd_pre * (1 - i.assumption('marginal_tax_rate', 0.21))
 

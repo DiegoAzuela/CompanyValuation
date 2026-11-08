@@ -17,6 +17,8 @@ from valuation_models.earnings_capitalization import AverageEarningsCapitalizati
 from valuation_models.peter_lynch_fairvalue import PeterLynchFairValue
 from valuation_models.dividend_discount import DividendDiscountModel
 from valuation_models.trading_multiples import TradingMultiples
+from valuation_models.asset_value import NetCurrentAssetValue, LiquidationValue
+from valuation_models.book_value import JustifiedPriceToBook, GrahamNumber
 
 
 CONFIG = {
@@ -25,16 +27,19 @@ CONFIG = {
     'synthetic_rating_spreads': [[8.5, 'AAA', 0.0059], [3.0, 'A-', 0.0121], [-1e9, 'D', 0.19]],
     'projection_years': 1, 'terminal_growth': 0.02, 'max_initial_growth': 0.15,
     'sbc_as_expense': True, 'include_operating_leases_in_debt': True,
-    'include_long_term_investments_in_cash': False,
+    'long_term_investments_in_cash': 'auto', 'long_term_investments_overrides': {},
+    'synthetic_rating_spreads_as_of': '2026-01', 'spreads_max_age_months': 15, 'reverse_dcf_years': 10,
     'avg_earnings_multiple': 15, 'avg_earnings_years': 3, 'lynch_max_growth': 25, 'ddm_max_growth': 0.04,
+    'liquidation_recovery': {'cash': 1.0, 'accounts_receivable': 0.8, 'inventory': 0.67, 'ppe_net': 0.15,
+                             'other_assets': 0.15, 'goodwill': 0.0},
 }
 
 YEARS = [2021, 2022, 2023]
 
 
-def make_inputs(series: dict, price=None, sic=None, years=YEARS, **overrides) -> ValuationInputs:
+def make_inputs(series: dict, price=None, sic=None, years=YEARS, tags=None, **overrides) -> ValuationInputs:
     base = {'shares_diluted': [100.0] * len(years)}
-    history = FinancialHistory.from_series(years, {**base, **series})
+    history = FinancialHistory.from_series(years, {**base, **series}, tags=tags)
     return ValuationInputs(ticker='TEST', cik='manual', history=history, price=price, sic=sic,
                            config={**CONFIG, **overrides})
 
@@ -144,9 +149,87 @@ def test_dcf_historical_fcff_subtracts_sbc_and_adds_after_tax_interest():
 
 
 def test_reverse_dcf_recovers_growth():
+    # 2% for 10 years then 2% forever is the same as the 1-year base case → same price
     i = make_inputs({'revenue': [1000.0] * 3}, price=12.75)
     dcf = DiscountedCashFlow(i, wacc=0.10, initial_growth=0.02, fcff_margin=0.10, mid_year=False)
-    assert dcf.value().details['implied_initial_growth'] == pytest.approx(0.02, abs=1e-6)
+    assert dcf.value().details['implied_growth'] == pytest.approx(0.02, abs=1e-6)
+
+
+def test_reverse_dcf_constant_rate_reprices_to_price():
+    i = make_inputs({'revenue': [1000.0] * 3}, price=20.0)
+    dcf = DiscountedCashFlow(i, wacc=0.10, initial_growth=0.02, fcff_margin=0.10, mid_year=False)
+    g = dcf.value().details['implied_growth']
+    assert g > 0.02
+    assert dcf._run([g] * 10, 0.02, 0.10, 0.10)['value_per_share'] == pytest.approx(20.0, abs=1e-6)
+
+
+# ----------------------------------------------------------------------
+# Equity bridge — long-term investments by XBRL tag
+# ----------------------------------------------------------------------
+def _lti_inputs(tag, **overrides):
+    return make_inputs({'cash': [None, None, 10.0], 'long_term_investments': [None, None, 50.0]},
+                       tags={'long_term_investments': [None, None, tag]}, **overrides)
+
+
+def test_debt_security_investments_count_as_cash():
+    i = _lti_inputs('MarketableSecuritiesNoncurrent')
+    assert i.cash_and_investments() == pytest.approx(60.0)
+    assert i.equity_bridge(100.0)[-1][1] == pytest.approx(160.0)
+
+
+def test_strategic_investments_excluded_unless_overridden():
+    assert _lti_inputs('LongTermInvestments').cash_and_investments() == pytest.approx(10.0)
+    forced = _lti_inputs('LongTermInvestments', long_term_investments_overrides={'TEST': True})
+    assert forced.cash_and_investments() == pytest.approx(60.0)
+
+
+def test_spread_table_staleness():
+    from datetime import date
+    w = WACC(make_inputs({}))
+    assert w.spread_table_warning(today=date(2027, 4, 1)) is None        # 15 months
+    assert '16 months old' in w.spread_table_warning(today=date(2027, 5, 1))
+
+
+# ----------------------------------------------------------------------
+# Balance-sheet models
+# ----------------------------------------------------------------------
+def test_ncav_hand_calculation():
+    i = make_inputs({'current_assets': [None, None, 500.0], 'total_liabilities': [None, None, 300.0]})
+    r = NetCurrentAssetValue(i).value()
+    assert r.value_per_share == pytest.approx(2.0)
+    assert r.details['buy_below'] == pytest.approx(4 / 3)
+    no_net_net = make_inputs({'current_assets': [None, None, 100.0], 'total_liabilities': [None, None, 300.0]})
+    assert not NetCurrentAssetValue(no_net_net).value().applicable
+
+
+def test_liquidation_value_hand_calculation():
+    i = make_inputs({'cash': [None, None, 100.0], 'accounts_receivable': [None, None, 100.0],
+                     'inventory': [None, None, 90.0], 'current_assets': [None, None, 300.0],
+                     'ppe_net': [None, None, 200.0], 'goodwill': [None, None, 50.0],
+                     'total_assets': [None, None, 550.0], 'total_liabilities': [None, None, 150.0]})
+    # 100 + 80 + 60.3 + other current 10 × 15% + PP&E 200 × 15% + goodwill 0 = 271.8 − 150 = 121.8
+    r = LiquidationValue(i).value()
+    assert r.equity_value == pytest.approx(121.8)
+    assert r.value_per_share == pytest.approx(1.218)
+
+
+def test_total_liabilities_derived_from_assets_minus_equity():
+    i = make_inputs({'total_assets': [None, None, 500.0], 'total_equity': [None, None, 200.0]})
+    assert i.total_liabilities() == pytest.approx(300.0)
+
+
+def test_justified_price_to_book():
+    i = make_inputs({'net_income': [20.0] * 3, 'total_equity': [100.0] * 3})
+    r = JustifiedPriceToBook(i, cost_of_equity=0.10, growth=0.02).value()
+    # ROE 20% → P/B = (0.20 − 0.02) / (0.10 − 0.02) = 2.25 × BVPS 1.00
+    assert r.assumptions['justified_pb'] == pytest.approx(2.25)
+    assert r.value_per_share == pytest.approx(2.25)
+
+
+def test_graham_number():
+    i = make_inputs({'net_income': [None, None, 100.0], 'total_equity': [None, None, 1000.0]})
+    # EPS 1.00, BVPS 10.00 → √(22.5 × 1 × 10) = 15
+    assert GrahamNumber(i).value().value_per_share == pytest.approx(15.0)
 
 
 def test_dcf_not_applicable_to_banks_and_caps_terminal_growth():

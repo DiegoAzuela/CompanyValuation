@@ -24,6 +24,8 @@ class ValuationModel:
         - PeterLynchFairValue      (peter_lynch_fairvalue.py)
         - DividendDiscountModel    (dividend_discount.py)
         - TradingMultiples         (trading_multiples.py)
+        - NetCurrentAssetValue, LiquidationValue   (asset_value.py)
+        - JustifiedPriceToBook, GrahamNumber       (book_value.py)
     """
 
     NAME = "Valuation Model"

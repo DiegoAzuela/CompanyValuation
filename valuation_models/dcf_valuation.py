@@ -21,7 +21,9 @@ Extras returned in result.details:
     projection   — year-by-year revenue / growth / FCFF / PV table
     sensitivity  — value per share across WACC × terminal growth
     scenarios    — bear / base / bull
-    implied_initial_growth — reverse DCF: the growth the current price implies
+    implied_growth — reverse DCF: the constant annual revenue growth over
+                     reverse_dcf_years (default 10) that the current price implies
+    equity_bridge  — enterprise value → equity value, line by line
 
 Not applicable to banks, insurers and REITs (debt is operating raw material there).
 """
@@ -104,12 +106,15 @@ class DiscountedCashFlow(ValuationModel):
     # ------------------------------------------------------------------
     # Core valuation
     # ------------------------------------------------------------------
-    def _run(self, g0: float, gT: float, margin: float, wacc: float) -> dict:
-        """Single DCF pass. Returns a dict with projection, EV, equity and per-share value."""
+    def _run(self, growths: list[float], gT: float, margin: float, wacc: float) -> dict:
+        """
+        Single DCF pass over one year per entry in `growths`, then a terminal
+        value growing at gT. Returns projection, EV, equity and per-share value.
+        """
         revenue    = self.history.latest('revenue')
         projection = []
         fcffs      = []
-        for year_idx, g in enumerate(self.growth_path(g0, gT), start=1):
+        for year_idx, g in enumerate(growths, start=1):
             revenue = revenue * (1 + g)
             fcff    = revenue * margin
             fcffs.append(fcff)
@@ -124,7 +129,7 @@ class DiscountedCashFlow(ValuationModel):
 
         pv_fcff = self.present_value(fcffs, wacc, mid_year=self.mid_year)
         tv      = self.terminal_value(fcffs[-1], gT, wacc)
-        pv_tv   = tv / (1 + wacc) ** self.projection_years
+        pv_tv   = tv / (1 + wacc) ** len(growths)
         ev      = pv_fcff + pv_tv
         equity  = self.equity_from_enterprise(ev)
 
@@ -162,7 +167,7 @@ class DiscountedCashFlow(ValuationModel):
         if margin <= 0:
             warnings.append(f"Average FCFF margin is negative ({margin:.1%}) — DCF value is not meaningful")
 
-        run = self._run(g0, gT, margin, wacc)
+        run = self._run(self.growth_path(g0, gT), gT, margin, wacc)
 
         tv_share = run['pv_terminal'] / run['enterprise_value'] if run['enterprise_value'] > 0 else None
         if tv_share is not None and tv_share > 0.75:
@@ -194,7 +199,9 @@ class DiscountedCashFlow(ValuationModel):
                 'terminal_value_share':   tv_share,
                 'sensitivity':            self.sensitivity(g0, gT, margin, wacc),
                 'scenarios':              self.scenarios(g0, gT, margin, wacc),
-                'implied_initial_growth': self.implied_growth(gT, margin, wacc),
+                'implied_growth':         self.implied_growth(gT, margin, wacc),
+                'reverse_dcf_years':      self.reverse_years(),
+                'equity_bridge':          i.equity_bridge(run['enterprise_value']),
             },
             warnings = warnings,
         )
@@ -210,7 +217,7 @@ class DiscountedCashFlow(ValuationModel):
         for dw in wacc_steps:
             for dg in growth_steps:
                 w, g = wacc + dw, gT + dg
-                grid[(round(w, 4), round(g, 4))] = self._run(g0, g, margin, w)['value_per_share'] if w > g else None
+                grid[(round(w, 4), round(g, 4))] = self._run(self.growth_path(g0, g), g, margin, w)['value_per_share'] if w > g else None
         return grid
 
     def scenarios(self, g0: float, gT: float, margin: float, wacc: float) -> dict:
@@ -224,19 +231,25 @@ class DiscountedCashFlow(ValuationModel):
             'base': (g0, margin, wacc),
             'bull': (g0 + 0.03, margin * 1.10, max(wacc - 0.005, gT + 0.01)),
         }
-        return {name: self._run(g, gT, m, w)['value_per_share'] for name, (g, m, w) in cases.items()}
+        return {name: self._run(self.growth_path(g, gT), gT, m, w)['value_per_share'] for name, (g, m, w) in cases.items()}
+
+    def reverse_years(self) -> int:
+        return self.inputs.assumption('reverse_dcf_years', 10)
 
     def implied_growth(self, gT: float, margin: float, wacc: float,
                        lo: float = -0.20, hi: float = 0.60) -> Optional[float]:
         """
-        Reverse DCF: the year-1 revenue growth that makes the DCF value equal the
-        current price (holding margin, WACC and terminal growth fixed). Bisection
-        works because value rises monotonically with growth when margin > 0.
+        Reverse DCF: the constant annual revenue growth over reverse_dcf_years
+        (then terminal growth forever) that makes the DCF value equal the current
+        price, holding margin and WACC fixed. One flat rate over a decade reads
+        directly as "the market expects X% a year", unlike a year-1 rate that fades.
+        Bisection works because value rises monotonically with growth when margin > 0.
         """
         price = self.inputs.price
         if price is None or margin <= 0:
             return None
-        f = lambda g: self._run(g, gT, margin, wacc)['value_per_share'] - price
+        n = self.reverse_years()
+        f = lambda g: self._run([g] * n, gT, margin, wacc)['value_per_share'] - price
         if f(lo) > 0 or f(hi) < 0:
             return None  # price is outside what any growth in [lo, hi] can justify
         for _ in range(60):
@@ -262,6 +275,12 @@ class DiscountedCashFlow(ValuationModel):
         print(f"       {'PV of FCFF':<34} {d['pv_fcff']:>32,.0f}")
         print(f"       {'PV of terminal value':<34} {d['pv_terminal']:>32,.0f}")
 
+        print(f"\n  Equity bridge")
+        print(f"  {'-'*56}")
+        for label, amount, note in d['equity_bridge']:
+            prefix = "   >>  " if label.startswith('=') else "       "
+            print(f"{prefix}{label:<34} {amount:>22,.0f}" + (f"   [{note}]" if note else ''))
+
         print(f"\n  Sensitivity — value per share (rows: WACC, columns: terminal growth)")
         print(f"  {'-'*56}")
         waccs   = sorted({w for w, _ in d['sensitivity']})
@@ -276,8 +295,15 @@ class DiscountedCashFlow(ValuationModel):
         for name, vps in d['scenarios'].items():
             print(f"       {name.capitalize():<10} {f'${vps:,.2f}' if vps is not None else 'N/A':>14}")
 
-        ig = d['implied_initial_growth']
+        ig = d['implied_growth']
         if ig is not None:
-            print(f"\n  Reverse DCF: today's price implies {ig:.1%} initial revenue growth "
-                  f"(base case assumes {result.assumptions['initial_growth']:.1%})")
+            hist = self.history.cagr('revenue')
+            print(f"\n  Reverse DCF")
+            print(f"  {'-'*56}")
+            print(f"       Today's price implies {ig:.1%} revenue growth a year for {d['reverse_dcf_years']} years,")
+            print(f"       then {result.assumptions['terminal_growth']:.1%} forever (same margin and WACC).")
+            if hist is not None:
+                print(f"       Historical revenue CAGR: {hist:.1%} (FY{self.history.years[0]}–FY{self.history.years[-1]})")
+        elif self.inputs.price is not None:
+            print(f"\n  Reverse DCF: no growth rate between −20% and 60% a year justifies today's price")
         print(f"{'='*60}")
