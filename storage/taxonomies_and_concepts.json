@@ -532,9 +532,10 @@
         "balance": "debit",
         "candidates": [
           "InterestExpense",
+          "InterestExpenseNonoperating",
           "InterestExpenseDebt",
           "InterestAndDebtExpense",
-          "FinanceLeaseInterestExpense"
+          "InterestPaidNet"
         ]
       },
 

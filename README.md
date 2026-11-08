@@ -15,7 +15,17 @@
     | Margin of Safety | Buy when price is significantly below conservative intrinsic value. |
 
 ## **HOW TO RUN**
-- ```py .\main.py```
+- First time (from the project folder, with [uv](https://docs.astral.sh/uv/) installed):
+    ```
+    uv python install 3.14
+    uv venv --python 3.14
+    .venv\Scripts\Activate.ps1
+    uv pip install -r requirements.txt
+    ```
+- Every time: activate the venv (`.venv\Scripts\Activate.ps1`), then
+    - ```python .\main.py``` — statements + valuation (set `PRICE` / `PEERS` in main.py)
+    - ```pytest``` — offline unit tests for the valuation models
+- Valuation defaults (risk-free rate, ERP, beta, terminal growth, multiples) live in `config.json → valuation`
 
 ## **VALIDAITON DATA**
 - https://www.apple.com/newsroom/pdfs/fy2024-q2/FY24_Q2_Consolidated_Financial_Statements.pdf
@@ -77,9 +87,17 @@ CompanyValuation/
 │   └── cash_flow_statement.py     # Assembles cash flow statement from XBRL concepts
 │
 ├── valuation_models/              # Valuation logic
-│   ├── __init__.py
-│   ├── dcf_valuation.py
-│   └── multiples.py
+│   ├── __init__.py                # ValuationModel base class, shared discounting math
+│   ├── inputs.py                  # FinancialHistory, ValuationInputs, ValuationResult
+│   ├── wacc.py                    # CAPM cost of equity, synthetic-rating cost of debt
+│   ├── dcf_valuation.py           # FCFF DCF + sensitivity, scenarios, reverse DCF
+│   ├── earning_power.py           # Greenwald EPV (no-growth value)
+│   ├── earnings_capitalization.py # Graham: 15× average earnings
+│   ├── peter_lynch_fairvalue.py   # Lynch: fair P/E = growth + yield
+│   ├── dividend_discount.py       # Gordon DDM + dividend record + buyback-adjusted value
+│   └── trading_multiples.py       # Peer-median P/E, P/B, P/S, EV/EBIT, EV/EBITDA
+│
+├── tests/                         # Offline unit tests (pytest)
 │
 ├── formatting/
 │   ├── __init__.py
@@ -121,3 +139,7 @@ CompanyValuation/
             2. Take the Ticker and run DCF valuation
             3. Take the information and format it in PDF
             4. Share pdf in whatsapp and/or gmail   
+
+## VENV ##
+    - Set-ExecutionPolicy -Scope Process Bypass
+    - \.venv\Scripts\Activate.ps1

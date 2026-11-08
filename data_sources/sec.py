@@ -58,10 +58,12 @@ Format: "YourAppName/1.0 your@email.com"
 See: https://www.sec.gov/os/accessing-edgar-data
 
 --- Rate Limiting ---
-The SEC enforces a limit of 10 requests per second. The lru_cache on
-get_concept_frame avoids redundant requests for the same frame — the full
-frame payload (often 3,000+ companies) is fetched once and reused for all
-CIK lookups against the same concept + period.
+The SEC enforces a limit of 10 requests per second. Every request goes
+through _get(), which spaces calls at least _MIN_INTERVAL apart and retries
+429 / 5xx responses with exponential backoff. The lru_cache on get_concept
+and get_concept_frame avoids redundant requests for the same payload — e.g.
+the 'Assets' concept is used both for fiscal-date inference and the balance
+sheet, and the same concepts are reused across current and prior periods.
 """
 
 from functools import lru_cache
@@ -69,11 +71,21 @@ from dotenv import load_dotenv
 import requests
 import json
 import os
+import time
 
 load_dotenv()
 
-# Path to the shared configuration file
-_CONFIG_FILE = "config.json"
+# Path to the shared configuration file (resolved relative to the project root,
+# so the code works regardless of the current working directory)
+_CONFIG_FILE = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+
+# Rate limiting / retry settings — SEC allows 10 req/s, stay safely below it
+_MIN_INTERVAL   = 0.12         # seconds between requests (~8 req/s)
+_MAX_RETRIES    = 3
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+_TIMEOUT        = 30           # seconds
+_last_request   = 0.0
+_session        = requests.Session()
 
 
 class SecData:
@@ -110,6 +122,44 @@ class SecData:
         return {'User-Agent': os.getenv('SEC_HEADER', '')}
 
     @staticmethod
+    def _get(url: str) -> requests.Response:
+        """
+        Single entry point for every HTTP request to the SEC.
+
+        Throttles to stay under the 10 req/s limit and retries transient
+        failures (429 / 5xx / connection errors) with exponential backoff.
+        A 404 is returned immediately — it is the expected "tag not filed"
+        signal for the companyconcept endpoint, not a transient error.
+
+        Raises requests.exceptions.RequestException after the final failure,
+        so callers keep their existing try/except handling.
+        """
+        global _last_request
+
+        for attempt in range(_MAX_RETRIES + 1):
+            wait = _MIN_INTERVAL - (time.monotonic() - _last_request)
+            if wait > 0:
+                time.sleep(wait)
+            _last_request = time.monotonic()
+
+            try:
+                response = _session.get(url, headers=SecData._get_headers(), timeout=_TIMEOUT)
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                if attempt == _MAX_RETRIES:
+                    raise
+                time.sleep(2 ** attempt)
+                continue
+
+            if response.status_code in _RETRY_STATUSES and attempt < _MAX_RETRIES:
+                time.sleep(2 ** attempt)
+                continue
+
+            response.raise_for_status()
+            return response
+
+        raise requests.exceptions.RetryError(f"Exhausted retries for {url}")
+
+    @staticmethod
     def fix_cik(cik: str) -> str:
         """
         Zero-pads a CIK to 10 digits, as required by the companyfacts
@@ -124,47 +174,28 @@ class SecData:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def get_fiscal_year_end(cik: str, year: int, period) -> str:
+    @lru_cache(maxsize=32)
+    def get_submissions(cik: str) -> dict:
         """
-        Looks up the actual balance sheet date for a given company/year/period
-        from the SEC submissions endpoint, handling non-calendar fiscal years.
+        Fetches company metadata and filing history from the submissions endpoint.
 
-        Falls back to calendar quarter-end dates if submissions lookup fails.
+        Useful for:
+          - SIC code / industry (decides which valuation models apply)
+          - Fiscal year end ('fiscalYearEnd', e.g. "0927" for Apple)
+          - Recent filings list (form, reportDate, filingDate, accessionNumber)
+
+        Returns:
+            Submissions JSON, or {} on failure.
         """
-        from financial_statements import Period  # avoid circular import
-
-        fallback = {
-            'Q1': f"{year}-03-31",
-            'Q2': f"{year}-06-30",
-            'Q3': f"{year}-09-30",
-            'Q4': f"{year}-12-31",
-            'FY': f"{year}-12-31",
-        }
-        period_key = 'Q4' if period == Period.FY else period.value
+        config = SecData._load_config()
+        cik    = SecData.fix_cik(cik)
+        url    = config['secData']['url_submissions'].format(cik=cik)
 
         try:
-            config = SecData._load_config()
-            cik_padded = SecData.fix_cik(cik)
-            url = config['secData']['url_submissions'].format(cik=cik_padded)
-            response = requests.get(url, headers=SecData._get_headers())
-            response.raise_for_status()
-            data = response.json()
-
-            filings = data.get('filings', {}).get('recent', {})
-            forms       = filings.get('form', [])
-            report_dates = filings.get('reportDate', [])
-
-            # Find 10-K filings where the report year matches
-            target_form = '10-K' if period_key == 'Q4' else '10-Q'
-            for form, date in zip(forms, report_dates):
-                if form == target_form and date.startswith(str(year)):
-                    return date  # e.g. "2023-09-30" for Apple FY2023
-
-        except Exception as e:
-            print(f"[SecData] Falling back to calendar date for CIK {cik}: {e}")
-
-        return fallback[period_key]
-
+            return SecData._get(url).json()
+        except requests.exceptions.RequestException as e:
+            print(f"[SecData] Error fetching submissions for CIK {cik}: {e}")
+            return {}
 
     @staticmethod
     def ticker_list() -> list:
@@ -181,18 +212,25 @@ class SecData:
         url    = config.get('secData', {}).get('url_ticker_and_cik', '')
 
         try:
-            response = requests.get(url, headers=SecData._get_headers())
-            response.raise_for_status()
-            data = response.json()
+            data = SecData._get(url).json()
             return [TickerInfo(item['ticker'], item['cik_str']) for item in data.values()]
         except requests.exceptions.RequestException as e:
             print(f"[SecData] Error fetching ticker list: {e}")
             return []
 
     @staticmethod
-    def seed_db() -> None:
-        """Seeds the local SQLite database with the full SEC ticker + CIK list."""
+    def seed_db(max_age_days: int = 7) -> None:
+        """
+        Seeds the local SQLite database with the full SEC ticker + CIK list.
+        Skips the download when the DB was refreshed within max_age_days.
+        """
+        from datetime import datetime, timedelta
         from db.tickers import TickerDB
+
+        last = TickerDB.last_updated()
+        if last is not None and datetime.utcnow() - last < timedelta(days=max_age_days):
+            return
+
         tickers = SecData.ticker_list()
         TickerDB.upsert_many(tickers)
         print(f"[SecData] Seeded {len(tickers)} tickers to DB.")
@@ -222,9 +260,7 @@ class SecData:
         url    = config['secData']['url_companyfacts'].format(cik=cik)
 
         try:
-            response = requests.get(url, headers=SecData._get_headers())
-            response.raise_for_status()
-            return response.json()
+            return SecData._get(url).json()
         except requests.exceptions.RequestException as e:
             print(f"[SecData] Error fetching companyfacts for CIK {cik}: {e}")
             return {}
@@ -234,13 +270,18 @@ class SecData:
     # ------------------------------------------------------------------
 
     @staticmethod
+    @lru_cache(maxsize=512)
     def get_concept(cik: str, taxonomy: str, concept: str) -> dict:
         """
         Fetches all historical values for a single XBRL concept for one company.
 
         Returns 404 (empty dict) if the company has never filed that specific
         tag. This is expected — use the fallback candidate chains in
-        taxonomies_and_concepts.json to try alternative tags.
+        taxonomies_and_concepts.json to try alternative tags. 404s are not
+        logged since they are the normal "try the next candidate" signal.
+
+        Results are cached per (cik, taxonomy, concept) — callers must treat
+        the returned dict as read-only.
 
         Args:
             cik:      Company CIK (padding applied automatically)
@@ -256,9 +297,11 @@ class SecData:
                     cik=cik, taxonomy=taxonomy, concept=concept)
 
         try:
-            response = requests.get(url, headers=SecData._get_headers())
-            response.raise_for_status()
-            return response.json()
+            return SecData._get(url).json()
+        except requests.exceptions.HTTPError as e:
+            if e.response is None or e.response.status_code != 404:
+                print(f"[SecData] Error fetching concept {concept} for CIK {cik}: {e}")
+            return {}
         except requests.exceptions.RequestException as e:
             print(f"[SecData] Error fetching concept {concept} for CIK {cik}: {e}")
             return {}
@@ -296,9 +339,7 @@ class SecData:
                     taxonomy=taxonomy, concept=concept, unit=unit, frame=frame)
 
         try:
-            response = requests.get(url, headers=SecData._get_headers())
-            response.raise_for_status()
-            raw = response.json()
+            raw = SecData._get(url).json()
 
             # Build a CIK → record index for O(1) lookups in get_concept_frameAndCik.
             # CIKs are bare integers in the frame response (not zero-padded strings).

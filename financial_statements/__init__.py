@@ -29,6 +29,20 @@ class Period(str, Enum):
     FY = "FY"   # full-year duration — income statement only; maps to Q4I for balance sheet
 
 
+def previous_period(year: int, period: 'Period') -> tuple[int, 'Period']:
+    """
+    The balance sheet date that opens the given period — what a flow
+    reconciliation (e.g. retained earnings) must compare against:
+
+        Q2, Q3, Q4 → previous quarter of the same fiscal year
+        Q1, FY     → prior fiscal year end
+    """
+    if period in (Period.Q1, Period.FY):
+        return year - 1, Period.Q4
+    order = [Period.Q1, Period.Q2, Period.Q3, Period.Q4]
+    return year, order[order.index(period) - 1]
+
+
 class FinancialStatement:
     """
     Base class for all financial statements.
@@ -50,6 +64,10 @@ class FinancialStatement:
         _CONCEPTS: dict = json.load(_f)
 
     _TAXONOMY: str = _CONCEPTS['_meta']['taxonomy']  # "us-gaap"
+
+    # Unit lookup order: monetary amounts, then per-share (EPS), then share counts
+    _UNIT_PREFERENCE: tuple = ('USD', 'USD/shares', 'shares')
+    _FORMS:           tuple = ('10-K', '10-Q', '10-K/A', '10-Q/A')  # include amendments
 
     # ------------------------------------------------------------------
     # _CONCEPTS and _CRITICAL are overridden by BalanceSheet and IncomeStatement
@@ -153,24 +171,32 @@ class FinancialStatement:
             return (350, 380)
         return (75, 105)  # single fiscal quarter
 
-    def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float]]:
+    def _resolve_concept(self, candidates: list[str]) -> tuple[Optional[str], Optional[float], Optional[str]]:
         """
         Tries each candidate XBRL tag in order via the company concept
         endpoint and returns the first match for this CIK and target date.
 
         Returns:
-            (matched_tag, value) — or (None, None) if no candidate matched.
+            (matched_tag, value, unit) — or (None, None, None) if no candidate matched.
         """
         for tag in candidates:
-            val = self._resolve_from_company_concept(tag)
+            val, unit = self._resolve_from_company_concept(tag)
             if val is not None:
-                return tag, val
-        return None, None
+                return tag, val, unit
+        return None, None, None
 
-    def _resolve_from_company_concept(self, concept: str) -> Optional[float]:
+    @staticmethod
+    def _latest_filed(entries: list[dict]) -> dict:
+        """Most recently filed entry — picks up amendments and restatements."""
+        return max(entries, key=lambda e: e.get('filed', ''))
+
+    def _resolve_from_company_concept(self, concept: str) -> tuple[Optional[float], Optional[str]]:
         """
         Fetches the full company concept history and finds the value
         whose period-end matches the target date for this instance.
+
+        Returns:
+            (value, unit) — or (None, None) if no value matches.
         """
         data = SecData.get_concept(
             cik=self.cik,
@@ -178,37 +204,70 @@ class FinancialStatement:
             concept=concept
         )
         if not data:
-            return None
+            return None, None
 
-        units = data.get('units', {}).get('USD', [])
-        if not units:
-            return None
+        # Monetary concepts file under USD, EPS under USD/shares, share counts under shares
+        all_units = data.get('units', {})
+        unit = next((u for u in self._UNIT_PREFERENCE if all_units.get(u)), None)
+        if unit is None:
+            return None, None
 
+        entries = [e for e in all_units[unit] if e.get('form') in self._FORMS]
         target_date = self._get_target_date()
 
-        matches = [
-            e for e in units
-            if e.get('end') == target_date
-            and e.get('form') in ('10-K', '10-Q', '10-K/A', '10-Q/A')  # include amendments
-        ]
+        matches = [e for e in entries if e.get('end') == target_date]
         if not matches:
-            return None
+            return None, None
 
-        # Duration concepts (income statement, cash flow) carry a 'start' field.
-        # EDGAR includes both single-quarter and YTD entries for the same end date,
-        # so filter by expected period length to avoid picking up the YTD entry.
+        # Instant concepts (balance sheet) have no 'start' — any match is the snapshot.
         duration_matches = [e for e in matches if e.get('start')]
-        if duration_matches:
-            lo, hi = self._duration_day_range()
-            filtered = [
-                e for e in duration_matches
-                if lo <= _days_between(e['start'], e['end']) <= hi
-            ]
-            if filtered:
-                matches = filtered
+        if not duration_matches:
+            return self._latest_filed(matches).get('val'), unit
 
-        matches.sort(key=lambda e: e.get('filed', ''), reverse=True)
-        return matches[0].get('val')
+        # Duration concepts (income statement, cash flow): EDGAR includes both
+        # single-quarter and YTD entries for the same end date, so filter by
+        # expected period length to avoid picking up the YTD entry.
+        lo, hi = self._duration_day_range()
+        direct = [
+            e for e in duration_matches
+            if lo <= _days_between(e['start'], e['end']) <= hi
+        ]
+        if direct:
+            return self._latest_filed(direct).get('val'), unit
+
+        if self.period == Period.FY or unit != 'USD':
+            return None, None
+
+        # No single-quarter entry was filed. This is normal for:
+        #   - cash flow statements, which 10-Qs only report year-to-date
+        #   - Q4, which only appears inside the 10-K's full-year figure
+        # Derive it as YTD(ending target) − YTD(ending one quarter earlier).
+        return self._derive_quarter(entries, duration_matches, target_date), unit
+
+    def _derive_quarter(self, entries: list[dict], ytd_matches: list[dict], target_date: str) -> Optional[float]:
+        """
+        Derives a single-quarter value from two year-to-date entries that share
+        the same fiscal-year start date, e.g.:
+            Q2 = 6M YTD − 3M (Q1)       Q3 = 9M YTD − 6M YTD       Q4 = FY − 9M YTD
+        Returns None if the earlier YTD entry is not available.
+
+        Only valid for flow concepts (sums over time). Per-share and weighted
+        share-count concepts are not additive, so they are never derived.
+        """
+        lo, hi = self._duration_day_range()
+
+        for ytd in sorted(ytd_matches, key=lambda e: e.get('filed', ''), reverse=True):
+            if ytd.get('val') is None:
+                continue
+            prior = [
+                e for e in entries
+                if e.get('start') == ytd['start']
+                and e.get('val') is not None
+                and lo <= _days_between(e.get('end'), target_date) <= hi
+            ]
+            if prior:
+                return ytd['val'] - self._latest_filed(prior)['val']
+        return None
     
     # ------------------------------------------------------------------
     # Build
@@ -245,7 +304,7 @@ class FinancialStatement:
                     continue
 
                 candidates    = line.get('candidates', [])
-                tag_used, val = self._resolve_concept(candidates)
+                tag_used, val, unit = self._resolve_concept(candidates)
 
                 if val is None:
                     self.data['meta']['missing_line_items'].append({
@@ -260,7 +319,7 @@ class FinancialStatement:
                     'label':       line.get('label'),
                     'tag_used':    tag_used,
                     'val':         val,
-                    'unit':        'USD',
+                    'unit':        unit,
                     'balance':     line.get('balance'),
                     'is_total':    line.get('is_total', False),
                     'is_subtotal': line.get('is_subtotal', False)

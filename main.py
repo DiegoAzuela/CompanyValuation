@@ -1,15 +1,28 @@
 from financial_statements.balance_sheet import BalanceSheet
 from financial_statements.income_statement import IncomeStatement
 from financial_statements.cash_flow_statement import CashFlowStatement
-from financial_statements import FinancialStatement, Period
+from financial_statements import FinancialStatement, Period, previous_period
 from db.database import TickerDatabase 
 from data_sources.sec import SecData
 from db.tickers import TickerDB
+from valuation_models.inputs import FinancialHistory, ValuationInputs, load_valuation_config
+from valuation_models.wacc import WACC, PLACEHOLDER_WARNING
+from valuation_models.dcf_valuation import DiscountedCashFlow
+from valuation_models.earning_power import EarningsPowerValue
+from valuation_models.earnings_capitalization import AverageEarningsCapitalization
+from valuation_models.peter_lynch_fairvalue import PeterLynchFairValue
+from valuation_models.dividend_discount import DividendDiscountModel
+from valuation_models.trading_multiples import TradingMultiples
 from dotenv import load_dotenv
 import os
+import sys
+
+# Windows defaults to cp1252 when output is redirected to a file/pipe, which
+# cannot encode the box-drawing and ✓/⚠ characters used in the summaries
+sys.stdout.reconfigure(encoding='utf-8')
 
 TickerDatabase.init_db()
-SecData.seed_db()
+SecData.seed_db()  # only re-downloads when the local list is older than 7 days
 
 # Actual financial statements - https://www.apple.com/newsroom/pdfs/fy2025-q2/FY25_Q2_Consolidated_Financial_Statements.pdf
 load_dotenv()
@@ -19,9 +32,14 @@ CIK  = "320193"  # Apple
 YEAR = 2025
 PERIOD = Period.Q2
 
+# ── Valuation inputs ──────────────────────────────────────────────────
+# No market data source yet: set the current price and peer prices by hand.
+# With PRICE = None, models still run but upside / margin of safety are N/A
+# and the WACC falls back to an assumed debt weight.
+PRICE = None                  # e.g. 250.00
+PEERS = {}                    # e.g. {"MSFT": 510.00, "GOOGL": 245.00, "META": 720.00}
+
 if __name__ == "__main__":
-    # Example usage of the SecData class to fetch ticker information
-    tickers = SecData.ticker_list()
     cik_from_db = TickerDB.get_cik(TICKER)
 
     # Display the summary of what will be evaluated
@@ -60,7 +78,37 @@ if __name__ == "__main__":
     print(f"Cash conversion:    {fmt(inc.fall_to_sales(cf), '.2%')}")
     print(f"Op CF / Net Income: {fmt(cf.operating_cf_to_net_income(inc), '.2f', suffix='x')}")
 
-    # reconciliation requires a prior-year balance sheet
-    bs_prior = BalanceSheet(CIK, YEAR - 1, PERIOD).build()
+    # reconciliation compares against the balance sheet that opens this period
+    # (prior quarter for Q2–Q4, prior fiscal year end for Q1 / FY)
+    bs_prior = BalanceSheet(CIK, *previous_period(YEAR, PERIOD)).build()
     print(f"RE reconciliation:  {inc.simple_reconciliation(bs, bs_prior, dividends_paid=cf.get_dividends_paid() or 0.0)}")
     print(f"Full RE reconciliation: {inc.full_reconciliation(bs, bs_prior, cf, dividends_paid=cf.get_dividends_paid() or 0.0)}")
+
+    # ── Valuation (fiscal-year history) ───────────────────────────────
+    history = FinancialHistory.build(CIK, n_years=load_valuation_config().get('history_years', 5))
+    inputs  = ValuationInputs(ticker=TICKER, cik=CIK, history=history, price=PRICE)
+    print(f"\n── Valuation: {TICKER}  FY{history.years[0]}–FY{history.years[-1]} ──────────────────")
+
+    WACC(inputs).summarize()
+    DiscountedCashFlow(inputs).summarize()
+
+    models = [
+        DiscountedCashFlow(inputs),
+        EarningsPowerValue(inputs),
+        AverageEarningsCapitalization(inputs),
+        PeterLynchFairValue(inputs),
+        DividendDiscountModel(inputs),
+        TradingMultiples(inputs, peers=PEERS),
+    ]
+    results = [m.value() for m in models]
+
+    print(f"\n{'='*60}")
+    print(f"Valuation Summary — {TICKER}" + (f"  (price ${PRICE:,.2f})" if PRICE else ''))
+    print(f"{'='*60}")
+    for r in results:
+        print(f"  {r}")
+    # Shared warnings (e.g. placeholder market inputs) are printed once here, not per model
+    shared = sorted({w for r in results for w in r.warnings if w.startswith(PLACEHOLDER_WARNING)})
+    for w in shared:
+        print(f"\n  ⚠  {w}")
+    print(f"{'='*60}")

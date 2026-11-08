@@ -1,11 +1,54 @@
 {
     "secData": {
         "url_ticker_and_cik":   "https://www.sec.gov/files/company_tickers.json",
+        "url_submissions":      "https://data.sec.gov/submissions/CIK{cik}.json",
         "url_companyfacts":     "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
         "url_concept":          "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/{taxonomy}/{concept}.json",
         "url_concept_withframe":"https://data.sec.gov/api/xbrl/frames/{taxonomy}/{concept}/{unit}/{frame}.json",
         "headers": {
             "User-Agent": "**review .env file for this info**"
         }
+    },
+    "valuation": {
+        "_notes": "Rates are decimals (0.042 = 4.2%). risk_free_rate, equity_risk_premium and beta are PLACEHOLDERS until a market data source exists — models flag them in their warnings. Refresh synthetic_rating_spreads each January from Damodaran (pages.stern.nyu.edu/~adamodar → Data → Ratings, Interest Coverage Ratios and Default Spread).",
+
+        "history_years":        5,
+
+        "risk_free_rate":       0.042,
+        "equity_risk_premium":  0.045,
+        "beta":                 1.0,
+        "marginal_tax_rate":    0.21,
+
+        "default_debt_weight":  0.10,
+        "default_credit_spread":0.0107,
+        "synthetic_rating_spreads": [
+            [8.50,   "AAA",  0.0059],
+            [6.50,   "AA",   0.0070],
+            [5.50,   "A+",   0.0092],
+            [4.25,   "A",    0.0107],
+            [3.00,   "A-",   0.0121],
+            [2.50,   "BBB",  0.0147],
+            [2.25,   "BB+",  0.0174],
+            [2.00,   "BB",   0.0221],
+            [1.75,   "B+",   0.0273],
+            [1.50,   "B",    0.0321],
+            [1.25,   "B-",   0.0407],
+            [0.80,   "CCC",  0.0864],
+            [0.65,   "CC",   0.1134],
+            [0.20,   "C",    0.1512],
+            [-1e9,   "D",    0.1900]
+        ],
+
+        "projection_years":     5,
+        "terminal_growth":      0.025,
+        "max_initial_growth":   0.15,
+        "sbc_as_expense":       true,
+        "include_operating_leases_in_debt":      true,
+        "include_long_term_investments_in_cash": false,
+
+        "avg_earnings_multiple":     15,
+        "avg_earnings_years":        3,
+        "lynch_max_growth":          25,
+        "ddm_max_growth":            0.04
     }
 }

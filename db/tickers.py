@@ -3,6 +3,7 @@
 Description: Ticker CRUD operations for the local SQLite database.
 """
 from .database import TickerDatabase
+from datetime import datetime
 from typing import Optional
 
 class TickerDB:
@@ -35,6 +36,12 @@ class TickerDB:
     def exists(ticker: str) -> bool:
         """Check if a ticker exists in the database."""
         return TickerDB.get_cik(ticker) is not None
+    @staticmethod
+    def last_updated() -> Optional[datetime]:
+        """Returns the most recent update time (UTC), or None if the table is empty."""
+        with TickerDatabase.get_connection() as conn:
+            row = conn.execute("SELECT MAX(updated_at) AS ts FROM tickers").fetchone()
+            return datetime.strptime(row["ts"], "%Y-%m-%d %H:%M:%S") if row["ts"] else None
     @staticmethod
     def get_all() -> list[dict]:
         """Returns all tickers in the database."""

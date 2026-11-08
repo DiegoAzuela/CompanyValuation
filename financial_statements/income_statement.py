@@ -13,12 +13,33 @@ Usage:
     is.summarize()
 """
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Union
 from financial_statements import FinancialStatement, Period
 
 if TYPE_CHECKING:
     from financial_statements.balance_sheet import BalanceSheet
     from financial_statements.cash_flow_statement import CashFlowStatement
+
+
+@dataclass
+class ReconciliationResult:
+    """Outcome of a bridge check: how far the explained amount is from net income."""
+    net_income:    float
+    explained:     float
+    residual:      float   # net_income − explained
+    residual_pct:  float   # |residual| / |net_income|
+    passed:        bool
+
+    @classmethod
+    def compare(cls, net_income: float, explained: float, tolerance_pct: float) -> 'ReconciliationResult':
+        residual = net_income - explained
+        pct      = abs(residual) / abs(net_income) if net_income else float('inf')
+        return cls(net_income, explained, residual, pct, pct <= tolerance_pct)
+
+    def __str__(self) -> str:
+        status = '✓ PASS' if self.passed else '✗ FAIL'
+        return f"{status}  residual ${self.residual:,.0f} ({self.residual_pct:.1%} of net income)"
 
 
 class IncomeStatement(FinancialStatement):
@@ -182,21 +203,23 @@ class IncomeStatement(FinancialStatement):
             return None
         return (cur_rev > prior_rev) and (cur_cf <= prior_cf_val)
 
-    def simple_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', dividends_paid: float = 0.0, tolerance: float = 1.0) -> Optional[bool]:
+    def simple_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', dividends_paid: float = 0.0, tolerance_pct: float = 0.03) -> Optional[ReconciliationResult]:
         """
         Retained earnings bridge: NI ≈ RE_current − RE_prior + dividends_paid.
         This is the Statement of Retained Earnings equation expressed as a check.
         Pass cf.get_dividends_paid() or 0.0 for companies that don't pay dividends.
+
+        bs_prior must be the balance sheet that OPENS this income statement's
+        period — use financial_statements.previous_period(year, period).
         """
-        ni  = self.get_net_income()
+        ni   = self.get_net_income()
         re_c = bs_current.get_retained_earnings()
         re_p = bs_prior.get_retained_earnings()
-        print(f"debug: net_income: {ni}, retainedEarningsCurrent: {re_c}, retainedEarningsPrior: {re_p}, dividendsPaid: {dividends_paid}")
         if any(v is None for v in [ni, re_c, re_p]):
             return None
-        return abs(ni - (re_c - re_p + dividends_paid)) <= tolerance
-    
-    def full_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', cf: 'CashFlowStatement', dividends_paid: float = 0.0, tolerance: float = 1.0) -> Optional[bool]:
+        return ReconciliationResult.compare(ni, re_c - re_p + dividends_paid, tolerance_pct)
+
+    def full_reconciliation(self, bs_current: 'BalanceSheet', bs_prior: 'BalanceSheet', cf: 'CashFlowStatement', dividends_paid: float = 0.0, tolerance_pct: float = 0.03) -> Optional[ReconciliationResult]:
         """
         Full retained earnings bridge using the APIC bridge to isolate the RE
         impact of share repurchases:
@@ -211,6 +234,12 @@ class IncomeStatement(FinancialStatement):
         Falls back to the simple formula (repurchases = 0) when APIC is unavailable.
         Does not handle the treasury-stock method — those companies do not charge
         repurchases to RE, so simple_reconciliation() is correct for them.
+
+        Why a % tolerance instead of exact: the bridge uses CASH amounts from the
+        cash flow statement, while equity moves on ACCRUED amounts, and some equity
+        items are never on the face statements (shares withheld for taxes, employee
+        stock purchase issuances, dividends declared vs paid). A residual of a few
+        percent of NI is normal; a large one means a mis-tagged or missing line.
         """
         ni    = self.get_net_income()
         re_c  = bs_current.get_retained_earnings()
@@ -227,7 +256,7 @@ class IncomeStatement(FinancialStatement):
         if apic_c is not None and apic_p is not None:
             ts_c = bs_current.get_treasury_stock() or 0.0
             ts_p = bs_prior.get_treasury_stock()   or 0.0
-            if abs(ts_c - ts_p) > tolerance:
+            if abs(ts_c - ts_p) > 1.0:
                 # Treasury stock method: repurchases accumulate as contra-equity,
                 # so they never touch RE. Simple bridge is correct for these companies.
                 re_impact = 0.0
@@ -238,12 +267,7 @@ class IncomeStatement(FinancialStatement):
         else:
             re_impact = sh_r  # fall back to CF amount when APIC unavailable
 
-        print(
-            f"full reconciliation: ni={ni}, re_c={re_c}, re_p={re_p}, "
-            f"dividends={dividends_paid}, sh_r={sh_r}, apic_c={apic_c}, "
-            f"apic_p={apic_p}, sbc={sbc}, proc={proc}, re_impact={re_impact}"
-        )
-        return abs(ni - (re_c - re_p + dividends_paid + re_impact)) <= tolerance
+        return ReconciliationResult.compare(ni, re_c - re_p + dividends_paid + re_impact, tolerance_pct)
 
     # ------------------------------------------------------------------
     # Display
@@ -274,7 +298,16 @@ class IncomeStatement(FinancialStatement):
                 tag      = line.get('tag_used', 'N/A')
                 is_total = line.get('is_total') or line.get('is_subtotal')
 
-                val_str = f"${val:>20,.0f}" if val is not None else f"{'N/A':>21}"
+                unit     = line.get('unit')
+
+                if val is None:
+                    val_str = f"{'N/A':>21}"
+                elif unit == 'USD/shares':
+                    val_str = f"${val:>20,.2f}"
+                elif unit == 'shares':
+                    val_str = f"{val:>21,.0f}"
+                else:
+                    val_str = f"${val:>20,.0f}"
                 prefix  = "  >>  " if is_total else "       "
                 print(f"{prefix}{label:<45} {val_str}   [{tag}]")
 
